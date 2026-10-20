@@ -1,0 +1,38 @@
+---
+# Static analysis profile. Checks that conflict with deliberate embedded-style choices are
+# disabled with a reason:
+#  - pointer arithmetic / array indexing: bit-level signal packing works on raw byte buffers
+#  - magic numbers: protocol constants (bit positions, byte offsets) are clearer inline
+#  - union access: the Linux struct can_frame / sigaction APIs expose fields via unions
+#  - trailing return types, identifier length: style preferences
+Checks: >
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -bugprone-easily-swappable-parameters,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -misc-non-private-member-variables-in-classes,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -readability-function-cognitive-complexity,
+  -readability-uppercase-literal-suffix,
+  -cert-dcl21-cpp,
+  -misc-no-recursion,
+  -cppcoreguidelines-pro-type-union-access
+WarningsAsErrors: ''
+HeaderFilterRegex: '(include|src|apps)/'
+FormatStyle: none
+# GCC-only warning flags from compile_commands.json are unknown to clang.
+ExtraArgs: ['-Wno-unknown-warning-option']

@@ -1,0 +1,26 @@
+# Build trees
+build/
+build-*/
+cmake-build-*/
+
+# Generated / runtime output
+*.log
+logs/
+compile_commands.json
+Testing/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Windows download markers (WSL)
+*:Zone.Identifier
