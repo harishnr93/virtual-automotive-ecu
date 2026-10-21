@@ -49,10 +49,18 @@ def finish(process, timeout=15):
 
 
 def summary(log):
-    match = re.search(r"SUMMARY (.*)", log)
+    match = re.search(r"\] SUMMARY (ecu=.*)", log)  # not SCHED_SUMMARY / CAN_RX_SUMMARY
     assert match, f"no SUMMARY line in:\n{log}"
     fields = dict(item.split("=", 1) for item in match.group(1).split())
     return {k: (float(v) if re.fullmatch(r"-?[\d.]+", v) else v) for k, v in fields.items()}
+
+
+def sched_summaries(log):
+    tasks = {}
+    for match in re.finditer(r"SCHED_SUMMARY (.*)", log):
+        fields = dict(item.split("=", 1) for item in match.group(1).split())
+        tasks[fields["task"]] = {k: (float(v) if re.fullmatch(r"-?[\d.]+", v) else v) for k, v in fields.items()}
+    return tasks
 
 
 @pytest.fixture
@@ -79,6 +87,16 @@ def test_two_ecus_exchange_periodic_messages(backend, port):
     assert s["timeouts"] == 1, sensor_log      # cruise ECU stopped before the sensor ECU
     assert "CRUISE_STATE Off -> Standby" in cruise_log  # main switch on after 1 s
 
+    # Phase 2: every ECU runs on the periodic scheduler and reports measured timing.
+    cruise_tasks = sched_summaries(cruise_log)
+    assert set(cruise_tasks) == {"Control_10ms", "Com_20ms", "Diag_100ms"}
+    assert abs(cruise_tasks["Control_10ms"]["activations"] - 300) <= 5   # 3.0 s / 10 ms
+    assert abs(cruise_tasks["Com_20ms"]["activations"] - 150) <= 3
+    assert set(sched_summaries(sensor_log)) == {"Com_10ms", "Diag_100ms"}
+    for task in list(cruise_tasks.values()) + list(sched_summaries(sensor_log).values()):
+        assert task["deadline_misses"] <= 0.01 * task["activations"], task
+    assert "queue_overruns=0" in cruise_log
+
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_timeout_detection_and_recovery(backend, port):
@@ -97,8 +115,8 @@ def test_timeout_detection_and_recovery(backend, port):
     assert c["timeouts"] == 1 and c["recoveries"] == 1
     assert c["alive_errors"] == 0  # counter resynchronised after the timeout
 
-    # Detection latency = configured 100 ms timeout + at most one 10 ms supervision tick,
-    # plus OS scheduling noise. The measured value is printed for the record.
+    # Detection latency = configured 100 ms timeout + at most one 20 ms COM task period
+    # (supervision runs in Com_20ms) + OS scheduling noise. Printed for the record.
     silence_ms = float(timeout.group(1))
     print(f"measured timeout detection: silence_ms={silence_ms}")
     assert 100.0 <= silence_ms < 200.0

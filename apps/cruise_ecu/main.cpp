@@ -1,18 +1,22 @@
-// Virtual Cruise Control ECU — Phase 1 communication skeleton.
+// Virtual Cruise Control ECU.
 //
-// Receives VehicleDynamics (0x100) and DriverInputs (0x110), supervises them (timeout,
-// alive counter, DLC, signal range) and publishes CruiseControlStatus (0x200) every 20 ms.
-// No control algorithm yet: ThrottleCommand is always 0 %. The PID controller and the full
-// cruise state machine are added in Phase 3, behind the same communication interface.
+// Phase 2 task structure (rate-monotonic priorities):
+//   CanRx thread     (prio 90) event-driven reception into the RX queue
+//   Control_10ms     (prio 80) evaluates the cruise state from the latest inputs
+//                              (the PID controller is added here in Phase 3)
+//   Com_20ms         (prio 70) RX processing + supervision, publishes inputs, transmits 0x200
+//   Diag_100ms       (prio 50) health monitoring: deadline misses, periodic status
+//
+// Data flows between tasks only through SharedSignal buffers (no shared mutable globals).
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <string>
 
 #include "can/alive_counter.hpp"
-#include "can/can_channel_factory.hpp"
-#include "can/can_log_writer.hpp"
+#include "can/can_receiver.hpp"
 #include "can/can_signal.hpp"
 #include "can/message_timeout_monitor.hpp"
 #include "can/vehicle_signals.hpp"
@@ -21,6 +25,8 @@
 #include "common/shutdown_signal.hpp"
 #include "core/clock.hpp"
 #include "core/logger.hpp"
+#include "core/periodic_scheduler.hpp"
+#include "core/shared_signal.hpp"
 
 namespace {
 
@@ -28,89 +34,127 @@ namespace can = vecu::can;
 namespace vehicle = vecu::can::vehicle;
 namespace core = vecu::core;
 namespace app = vecu::app;
+namespace sched = vecu::sched;
 
-constexpr std::chrono::milliseconds kTickPeriod{10};
-constexpr std::chrono::milliseconds kFirstTimeout{1000};
-constexpr std::uint64_t kStatusEveryTicks = 100U;
+using std::chrono::microseconds;
+using std::chrono::milliseconds;
 
-constexpr std::uint64_t ticksPerCycle(const can::MessageDef& message) noexcept {
-  return message.cycle_time_ms / static_cast<std::uint64_t>(kTickPeriod.count());
-}
-static_assert(vehicle::kCruiseControlStatus.cycle_time_ms % 10U == 0U, "cycle must be a multiple of the tick");
+constexpr milliseconds kFirstTimeout{1000};
+constexpr milliseconds kMaxInputAge{100};  // inputs older than this: COM task not running
 
-/// Latest validated inputs from the bus (the ECU's "signal buffer").
+/// Latest validated bus inputs (written by Com_20ms, read by Control_10ms).
 struct Inputs {
   double speed_kph{0.0};
   double accel_mps2{0.0};
+  double set_speed_kph{0.0};
   bool speed_valid{false};
   bool brake_pressed{false};
   bool main_switch{false};
-  double set_speed_kph{0.0};
+  bool all_received{false};  ///< every supervised message received at least once
+  bool comm_fault{false};    ///< at least one supervised message timed out
 };
 
-class CruiseEcuComStub {
+/// Control output (written by Control_10ms, read by Com_20ms and Diag_100ms).
+struct ControlOutput {
+  vehicle::CruiseState state{vehicle::CruiseState::Off};
+  double throttle_pct{0.0};
+  double target_kph{0.0};
+};
+
+class CruiseEcu {
  public:
-  explicit CruiseEcuComStub(app::CanIo& io) : io_(io) {
-    (void)monitor_.addMessage(vehicle::kVehicleDynamics.id,
-                              std::chrono::milliseconds{vehicle::kVehicleDynamics.timeout_ms}, kFirstTimeout);
-    (void)monitor_.addMessage(vehicle::kDriverInputs.id,
-                              std::chrono::milliseconds{vehicle::kDriverInputs.timeout_ms}, kFirstTimeout);
+  explicit CruiseEcu(app::EcuPlatform& platform) : platform_(platform), log_(platform.log()) {
+    (void)monitor_.addMessage(vehicle::kVehicleDynamics.id, milliseconds{vehicle::kVehicleDynamics.timeout_ms},
+                              kFirstTimeout);
+    (void)monitor_.addMessage(vehicle::kDriverInputs.id, milliseconds{vehicle::kDriverInputs.timeout_ms},
+                              kFirstTimeout);
+    monitor_.start(core::now());
   }
 
-  void onFrame(const can::CanFrame& frame, core::TimePoint now) {
-    io_.traceReceived(frame);
-    if (frame.id == vehicle::kVehicleDynamics.id) {
-      handleVehicleDynamics(frame, now);
-    } else if (frame.id == vehicle::kDriverInputs.id) {
-      handleDriverInputs(frame, now);
-    } else {
-      // not for this ECU
-    }
+  [[nodiscard]] bool registerTasks() {
+    sched::TaskConfig control{"Control_10ms", microseconds{10000}, microseconds{0}, microseconds{0},
+                              microseconds{2000}, app::kPriority10ms};
+    sched::TaskConfig com{"Com_20ms", microseconds{20000}, microseconds{1000}, microseconds{0},
+                          microseconds{5000}, app::kPriority20ms};
+    sched::TaskConfig diag{"Diag_100ms", microseconds{100000}, microseconds{3000}, microseconds{0},
+                           microseconds{20000}, app::kPriority100ms};
+    return platform_.addTask(control, [this](const sched::ActivationInfo& a) { taskControl(a); }) &&
+           platform_.addTask(com, [this](const sched::ActivationInfo& a) { taskCom(a); }) &&
+           platform_.addTask(diag, [this](const sched::ActivationInfo& a) { taskDiag(a); });
   }
 
-  void onTick(core::TimePoint now, std::uint64_t tick) {
-    if (tick == 0U) {
-      start_ = now;
-      monitor_.start(now);
-    }
-    monitor_.update(now, [this](const can::RxTimeoutEvent& event) { onTimeoutEvent(event); });
-
-    const vehicle::CruiseState state = evaluateState();
-    if (state != state_) {
-      log_.info(core::strCat("CRUISE_STATE ", vehicle::toString(state_), " -> ", vehicle::toString(state)));
-      state_ = state;
-    }
-    if ((tick % ticksPerCycle(vehicle::kCruiseControlStatus)) == 0U) {
-      sendStatus();
-    }
-    if ((tick > 0U) && ((tick % kStatusEveryTicks) == 0U)) {
-      log_.info(core::strCat("t=", app::fixed(core::toMillis(now - start_) / 1000.0, 1),
-                             "s speed=", app::fixed(inputs_.speed_kph, 2), "km/h accel=",
-                             app::fixed(inputs_.accel_mps2, 2), "m/s2 main=", inputs_.main_switch,
-                             " set=", app::fixed(inputs_.set_speed_kph, 0), "km/h state=",
-                             vehicle::toString(state_), " rx_0x100=", rx_vehicle_dynamics_,
-                             " rx_0x110=", rx_driver_inputs_));
-    }
-  }
-
-  void logSummary(const app::LoopTiming& timing, std::string_view bus) const {
-    log_.info(core::strCat("SUMMARY ecu=cruise_ecu bus=", bus, " tx=", io_.txOk(),
-                           " tx_failed=", io_.txFailed(), " rx_0x100=", rx_vehicle_dynamics_,
-                           " rx_0x110=", rx_driver_inputs_, " invalid=", invalid_frames_,
-                           " alive_errors=", alive_errors_, " timeouts=", timeout_events_,
-                           " recoveries=", recovery_events_, " ticks=", timing.ticks,
-                           " late_ticks=", timing.late_ticks,
-                           " max_tick_lateness_ms=", app::fixed(core::toMillis(timing.max_lateness), 3)));
+  void logSummary() const {
+    log_.info(core::strCat("SUMMARY ecu=cruise_ecu bus=", platform_.busName(), " tx=", platform_.io().txOk(),
+                           " tx_failed=", platform_.io().txFailed(), " rx_0x100=", rx_vehicle_dynamics_.load(),
+                           " rx_0x110=", rx_driver_inputs_.load(), " invalid=", invalid_frames_.load(),
+                           " alive_errors=", alive_errors_.load(), " timeouts=", timeout_events_.load(),
+                           " recoveries=", recovery_events_.load()));
   }
 
  private:
-  void handleVehicleDynamics(const can::CanFrame& frame, core::TimePoint now) {
+  // ------------------------------------------------------------ Control_10ms (prio 80) ----
+  void taskControl(const sched::ActivationInfo& /*activation*/) {
+    const core::TimePoint now = core::now();
+    const auto inputs = inputs_.read();
+    const bool stale = (inputs.sequence == 0U) || ((now - inputs.timestamp) > kMaxInputAge);
+
+    ControlOutput output;
+    output.state = evaluateState(inputs.value, stale);
+    output.throttle_pct = 0.0;  // Phase 3: PID controller output
+    output.target_kph = (output.state == vehicle::CruiseState::Standby) ? inputs.value.set_speed_kph : 0.0;
+
+    if (output.state != last_state_) {
+      log_.info(core::strCat("CRUISE_STATE ", vehicle::toString(last_state_), " -> ", vehicle::toString(output.state)));
+      last_state_ = output.state;
+    }
+    output_.write(output, now);
+  }
+
+  [[nodiscard]] static vehicle::CruiseState evaluateState(const Inputs& inputs, bool stale) {
+    if (inputs.comm_fault || (stale && inputs.all_received)) {
+      return vehicle::CruiseState::Fault;  // safe state: no valid inputs -> no control
+    }
+    if (!inputs.all_received || !inputs.main_switch) {
+      return vehicle::CruiseState::Off;
+    }
+    if (!inputs.speed_valid) {
+      return vehicle::CruiseState::Fault;
+    }
+    return vehicle::CruiseState::Standby;
+  }
+
+  // ---------------------------------------------------------------- Com_20ms (prio 70) ----
+  void taskCom(const sched::ActivationInfo& /*activation*/) {
+    can::RxFrame entry;
+    while (platform_.rxQueue().pop(entry)) {
+      platform_.io().traceReceived(entry);
+      if (entry.frame.id == vehicle::kVehicleDynamics.id) {
+        handleVehicleDynamics(entry);
+      } else if (entry.frame.id == vehicle::kDriverInputs.id) {
+        handleDriverInputs(entry);
+      } else {
+        // not for this ECU (CAN is a broadcast bus)
+      }
+    }
+    const core::TimePoint now = core::now();
+    monitor_.update(now, [this](const can::RxTimeoutEvent& event) { onTimeoutEvent(event); });
+
+    com_inputs_.comm_fault = monitor_.anyTimedOut();
+    com_inputs_.all_received = (monitor_.state(vehicle::kVehicleDynamics.id) != can::RxTimeoutState::WaitingFirst) &&
+                               (monitor_.state(vehicle::kDriverInputs.id) != can::RxTimeoutState::WaitingFirst);
+    inputs_.write(com_inputs_, now);
+
+    sendStatus(output_.read().value);
+  }
+
+  void handleVehicleDynamics(const can::RxFrame& entry) {
+    const can::CanFrame& frame = entry.frame;
     if (frame.dlc != vehicle::kVehicleDynamics.dlc) {
-      ++invalid_frames_;
+      invalid_frames_.fetch_add(1U);
       return;
     }
-    ++rx_vehicle_dynamics_;
-    (void)monitor_.notifyReceived(frame.id, now, [this](const can::RxTimeoutEvent& e) { onTimeoutEvent(e); });
+    rx_vehicle_dynamics_.fetch_add(1U);
+    (void)monitor_.notifyReceived(frame.id, entry.rx_time, [this](const can::RxTimeoutEvent& e) { onTimeoutEvent(e); });
     checkAlive(frame, vehicle::kVehicleDynamicsAlive, alive_vehicle_dynamics_);
 
     double speed = 0.0;
@@ -120,22 +164,23 @@ class CruiseEcuComStub {
     const bool accel_ok = can::decodePhysical(vehicle::kLongitudinalAccel, frame, accel) == can::SignalStatus::Ok;
     (void)can::decodePhysical(vehicle::kVehicleSpeedValid, frame, valid);
     if (!speed_ok || !accel_ok) {
-      ++invalid_frames_;  // out-of-range value: treat the sample as invalid (fault handling: Phase 5)
+      invalid_frames_.fetch_add(1U);  // out-of-range value (fault handling: Phase 5)
     }
-    inputs_.speed_valid = speed_ok && (valid > 0.5);
-    if (inputs_.speed_valid) {
-      inputs_.speed_kph = speed;
-      inputs_.accel_mps2 = accel;
+    com_inputs_.speed_valid = speed_ok && (valid > 0.5);
+    if (com_inputs_.speed_valid) {
+      com_inputs_.speed_kph = speed;
+      com_inputs_.accel_mps2 = accel;
     }
   }
 
-  void handleDriverInputs(const can::CanFrame& frame, core::TimePoint now) {
+  void handleDriverInputs(const can::RxFrame& entry) {
+    const can::CanFrame& frame = entry.frame;
     if (frame.dlc != vehicle::kDriverInputs.dlc) {
-      ++invalid_frames_;
+      invalid_frames_.fetch_add(1U);
       return;
     }
-    ++rx_driver_inputs_;
-    (void)monitor_.notifyReceived(frame.id, now, [this](const can::RxTimeoutEvent& e) { onTimeoutEvent(e); });
+    rx_driver_inputs_.fetch_add(1U);
+    (void)monitor_.notifyReceived(frame.id, entry.rx_time, [this](const can::RxTimeoutEvent& e) { onTimeoutEvent(e); });
     checkAlive(frame, vehicle::kDriverInputsAlive, alive_driver_inputs_);
 
     double brake = 0.0;
@@ -144,50 +189,33 @@ class CruiseEcuComStub {
     (void)can::decodePhysical(vehicle::kBrakePedalPressed, frame, brake);
     (void)can::decodePhysical(vehicle::kCruiseMainSwitch, frame, main_switch);
     if (can::decodePhysical(vehicle::kDriverSetSpeed, frame, set_speed) != can::SignalStatus::Ok) {
-      ++invalid_frames_;
+      invalid_frames_.fetch_add(1U);
       set_speed = 0.0;
     }
-    inputs_.brake_pressed = brake > 0.5;
-    inputs_.main_switch = main_switch > 0.5;
-    inputs_.set_speed_kph = set_speed;
+    com_inputs_.brake_pressed = brake > 0.5;
+    com_inputs_.main_switch = main_switch > 0.5;
+    com_inputs_.set_speed_kph = set_speed;
   }
 
-  /// Phase 1 state logic (communication-driven only; full state machine in Phase 3).
-  [[nodiscard]] vehicle::CruiseState evaluateState() const {
-    if (monitor_.anyTimedOut()) {
-      return vehicle::CruiseState::Fault;  // safe state: no valid inputs -> no control
-    }
-    const bool all_received = (monitor_.state(vehicle::kVehicleDynamics.id) == can::RxTimeoutState::Ok) &&
-                              (monitor_.state(vehicle::kDriverInputs.id) == can::RxTimeoutState::Ok);
-    if (!all_received || !inputs_.main_switch) {
-      return vehicle::CruiseState::Off;
-    }
-    if (!inputs_.speed_valid) {
-      return vehicle::CruiseState::Fault;
-    }
-    return vehicle::CruiseState::Standby;
-  }
-
-  void sendStatus() {
+  void sendStatus(const ControlOutput& output) {
     can::CanFrame frame = can::makeFrame(vehicle::kCruiseControlStatus);
-    const double target = (state_ == vehicle::CruiseState::Standby) ? inputs_.set_speed_kph : 0.0;
-    (void)can::encodePhysical(vehicle::kThrottleCommand, 0.0, frame);  // no controller yet
-    (void)can::encodePhysical(vehicle::kCruiseState, static_cast<double>(state_), frame);
-    (void)can::encodePhysical(vehicle::kCruiseTargetSpeed, target, frame);
+    (void)can::encodePhysical(vehicle::kThrottleCommand, output.throttle_pct, frame);
+    (void)can::encodePhysical(vehicle::kCruiseState, static_cast<double>(output.state), frame);
+    (void)can::encodePhysical(vehicle::kCruiseTargetSpeed, output.target_kph, frame);
     (void)can::encodePhysical(vehicle::kCruiseStatusAlive, alive_tx_.next(), frame);
-    (void)io_.send(frame);
+    (void)platform_.io().send(frame);
   }
 
   void checkAlive(const can::CanFrame& frame, const can::SignalDef& signal, can::AliveCounterChecker& checker) {
     double value = 0.0;
     if (can::decodePhysical(signal, frame, value) != can::SignalStatus::Ok) {
-      ++alive_errors_;
+      alive_errors_.fetch_add(1U);
       return;
     }
     const can::AliveCheckResult result = checker.check(static_cast<std::uint8_t>(value));
     if ((result == can::AliveCheckResult::Repeated) || (result == can::AliveCheckResult::Skipped) ||
         (result == can::AliveCheckResult::Invalid)) {
-      ++alive_errors_;
+      alive_errors_.fetch_add(1U);
       log_.warning(core::strCat("ALIVE_ERROR id=", can::formatId(frame.id), " result=", can::toString(result)));
     }
   }
@@ -195,35 +223,58 @@ class CruiseEcuComStub {
   void onTimeoutEvent(const can::RxTimeoutEvent& event) {
     app::logRxTimeoutEvent(log_, event);
     if (event.current == can::RxTimeoutState::TimedOut) {
-      ++timeout_events_;
+      timeout_events_.fetch_add(1U);
       if (event.id == vehicle::kVehicleDynamics.id) {
         alive_vehicle_dynamics_.reset();
-        inputs_.speed_valid = false;
+        com_inputs_.speed_valid = false;
       } else {
         alive_driver_inputs_.reset();
       }
     } else if (event.previous == can::RxTimeoutState::TimedOut) {
-      ++recovery_events_;
+      recovery_events_.fetch_add(1U);
     } else {
       // first reception
     }
   }
 
-  app::CanIo& io_;
-  core::Logger log_{"cruise_ecu"};
-  core::TimePoint start_{};
+  // -------------------------------------------------------------- Diag_100ms (prio 50) ----
+  void taskDiag(const sched::ActivationInfo& activation) {
+    platform_.reportNewDeadlineMisses();
+    if ((activation.activation > 0U) && ((activation.activation % 10U) == 0U)) {  // every 1 s
+      const Inputs inputs = inputs_.read().value;
+      const ControlOutput output = output_.read().value;
+      log_.info(core::strCat("speed=", app::fixed(inputs.speed_kph, 2), "km/h main=", inputs.main_switch,
+                             " set=", app::fixed(inputs.set_speed_kph, 0), "km/h state=",
+                             vehicle::toString(output.state), " rx_0x100=", rx_vehicle_dynamics_.load(),
+                             " rx_0x110=", rx_driver_inputs_.load(), " rxq_overruns=",
+                             platform_.rxQueue().overruns()));
+    }
+  }
+
+  app::EcuPlatform& platform_;
+  const core::Logger& log_;
+
+  // Shared between tasks (thread-safe buffers).
+  core::SharedSignal<Inputs> inputs_{};
+  core::SharedSignal<ControlOutput> output_{};
+
+  // Owned by Com_20ms only.
   can::MessageTimeoutMonitor<2U> monitor_{};
   can::AliveCounterChecker alive_vehicle_dynamics_{};
   can::AliveCounterChecker alive_driver_inputs_{};
   can::AliveCounterGenerator alive_tx_{};
-  Inputs inputs_{};
-  vehicle::CruiseState state_{vehicle::CruiseState::Off};
-  std::uint64_t rx_vehicle_dynamics_{0U};
-  std::uint64_t rx_driver_inputs_{0U};
-  std::uint64_t invalid_frames_{0U};
-  std::uint64_t alive_errors_{0U};
-  std::uint32_t timeout_events_{0U};
-  std::uint32_t recovery_events_{0U};
+  Inputs com_inputs_{};
+
+  // Owned by Control_10ms only.
+  vehicle::CruiseState last_state_{vehicle::CruiseState::Off};
+
+  // Counters: written by Com_20ms, read by Diag_100ms and main.
+  std::atomic<std::uint64_t> rx_vehicle_dynamics_{0U};
+  std::atomic<std::uint64_t> rx_driver_inputs_{0U};
+  std::atomic<std::uint64_t> invalid_frames_{0U};
+  std::atomic<std::uint64_t> alive_errors_{0U};
+  std::atomic<std::uint32_t> timeout_events_{0U};
+  std::atomic<std::uint32_t> recovery_events_{0U};
 };
 
 }  // namespace
@@ -233,7 +284,7 @@ int main(int argc, char** argv) {
   std::string error;
   switch (app::parseOptions(argc, argv, options, error)) {
     case app::ParseOutcome::ShowHelp:
-      app::printUsage(argv[0], "Virtual Cruise Control ECU (Phase 1 communication skeleton)");
+      app::printUsage(argv[0], "Virtual Cruise Control ECU (Phase 2: scheduled tasks, no controller yet)");
       return 0;
     case app::ParseOutcome::Error:
       (void)std::fprintf(stderr, "error: %s (use --help)\n", error.c_str());  // NOLINT(cppcoreguidelines-pro-type-vararg)
@@ -241,33 +292,18 @@ int main(int argc, char** argv) {
     case app::ParseOutcome::Run:
       break;
   }
-
   core::Logger::setMinLevel(options.verbose ? core::LogLevel::Debug : core::LogLevel::Info);
   app::installShutdownHandlers();
-  const core::Logger log("cruise_ecu");
 
-  can::CanStatus status = can::CanStatus::Ok;
-  const auto channel = can::createCanChannel(options.can, status);
-  if (!channel) {
-    log.error(core::strCat("cannot open CAN channel: ", can::toString(status)));
+  app::EcuPlatform platform("cruise_ecu", options);
+  if (!platform.init()) {
     return 1;
   }
-
-  can::CanLogWriter trace;
-  if (!options.can_log_path.empty() &&
-      (trace.open(options.can_log_path, std::string{channel->name()}) != can::CanStatus::Ok)) {
-    log.error(core::strCat("cannot open CAN trace file ", options.can_log_path));
+  CruiseEcu ecu(platform);
+  if (!ecu.registerTasks()) {
     return 1;
   }
-
-  app::CanIo io(*channel, trace);
-  CruiseEcuComStub ecu(io);
-  log.info("started (Ctrl+C to stop)");
-  const app::LoopTiming timing = app::runCooperativeLoop(
-      *channel, kTickPeriod, options.duration_s,
-      [&ecu](const can::CanFrame& frame, core::TimePoint now) { ecu.onFrame(frame, now); },
-      [&ecu](core::TimePoint now, std::uint64_t tick) { ecu.onTick(now, tick); });
-
-  ecu.logSummary(timing, channel->name());
-  return 0;
+  const int exit_code = platform.run();
+  ecu.logSummary();
+  return exit_code;
 }

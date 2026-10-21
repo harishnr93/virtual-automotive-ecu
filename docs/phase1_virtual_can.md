@@ -197,9 +197,12 @@ default behaviour.
   `Fault` while any input message is timed out. **No control yet** — PID and the full
   state machine come in Phase 3.
 
-Both run a simple single-threaded loop (`runCooperativeLoop`): wait for CAN frames until the
-next 10 ms tick, then run the cyclic function. Phase 2 replaces it with a real multi-rate
-scheduler.
+In Phase 1 both ran a simple single-threaded loop: wait for CAN frames until the next 10 ms
+tick, then run the cyclic function.
+
+> **Update (Phase 2):** this loop has been replaced by the periodic task scheduler, a CAN
+> reception thread and 10/20/100 ms tasks — see [phase2_scheduler.md](phase2_scheduler.md).
+> The timeout-detection and loop-lateness values in Section 8 were measured with the Phase 1 loop.
 
 ---
 

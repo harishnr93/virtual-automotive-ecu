@@ -15,14 +15,14 @@ firmware-update simulation and automated validation.
 | Phase | Content | Status |
 |---|---|---|
 | 1 | Environment, CAN stack, two virtual ECUs, tests | ✅ done |
-| 2 | Periodic ECU scheduler (10/20/100 ms), timing measurement | ⏳ planned |
+| 2 | Periodic ECU scheduler (10/20/100 ms), timing measurement | ✅ done |
 | 3 | Python vehicle simulator, PID cruise control | ⏳ planned |
 | 4 | ISO-TP + UDS diagnostic server | ⏳ planned |
 | 5 | Fault management, DTCs, software watchdog | ⏳ planned |
 | 6 | Firmware update simulation (CRC32, A/B partitions, rollback) | ⏳ planned |
 | 7 | Regression suite, performance report, CI, documentation | ⏳ planned |
 
-## What works today (Phase 1)
+## What works today (Phases 1–2)
 
 - **CAN abstraction** `ICanChannel` with three interchangeable backends:
   - Linux **SocketCAN** (`vcan0` / real `can0`)
@@ -37,10 +37,33 @@ firmware-update simulation and automated validation.
 - **Two virtual ECUs** (separate processes): a sensor ECU publishing vehicle data and a
   cruise ECU communication skeleton that supervises its inputs and enters `Fault` on
   communication loss.
-- **Tooling**: candump-format CAN traces, Python `vbus_dump.py` / `vbus_send.py` for the
-  software bus, environment check, demo script.
-- **Quality**: GoogleTest and pytest, 72 tests. Strict warnings with `-Werror`,
-  ASan/UBSan build, cppcheck and clang-tidy.
+- **Periodic task scheduler**: one thread per task with rate-monotonic priorities.
+  - **Timing:** absolute-time releases with no drift.
+  - **Overruns:** handled OSEK-style, with skipped activations counted.
+  - **Detection:** deadline misses and execution-budget overruns.
+  - **Measurement:** execution time, start latency, jitter and response time for every
+    activation, reported as a table, a summary line per task, or JSON.
+- **Priorities:** `SCHED_FIFO` priorities are requested only when asked and fall back
+  to normal scheduling when not permitted. The ECU reports which policy it actually got.
+- **Inter-task data exchange**: `SharedSignal<T>` with timestamps and sequence numbers, so
+  stale data can be detected. Priority-inheritance mutexes prevent unbounded priority inversion.
+- **OS abstraction layer** (`os_port`): threads, absolute sleep and a PI mutex. A
+  FreeRTOS/Zephyr port would replace only this layer.
+- **Event-driven CAN reception**: an RX thread, the equivalent of a receive interrupt,
+  feeds a bounded queue that the COM task drains.
+- **ECU task sets:**
+  - cruise ECU: Control_10ms, Com_20ms, Diag_100ms
+  - sensor ECU: Com_10ms, Diag_100ms
+- **Tooling**:
+  - candump-format CAN traces
+  - Python `vbus_dump.py` / `vbus_send.py` for the software bus
+  - `vecu_sched_bench` scheduler benchmark
+  - environment check and demo script
+- **Quality**:
+  - 113 GoogleTest and pytest tests
+  - strict warnings with `-Werror`
+  - ASan/UBSan and Clang ThreadSanitizer builds
+  - cppcheck and clang-tidy
 
 ## Quick start (WSL2 / Ubuntu 22.04)
 
@@ -52,38 +75,44 @@ cmake -S . -B build -DVECU_WARNINGS_AS_ERRORS=ON
 cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
 
-./scripts/run_demo.sh 5          # two ECUs talk for 5 s; logs in logs/
+./scripts/run_demo.sh 5          # two ECUs talk for 5 s; logs + timing report
 ./scripts/vbus_dump.py           # (other terminal) watch the bus like candump
+./build/bin/vecu_sched_bench --duration 10   # measure scheduler timing
 ```
 
-## Architecture (Phase 1)
+## Architecture
 
 ```
- vecu_sensor_ecu        vecu_cruise_ecu          ← applications (apps/)
+ vecu_sensor_ecu        vecu_cruise_ecu          ← applications: 10/20/100 ms tasks
         │                      │
- signal codec · CAN matrix · timeout monitor · alive counter   ← include/can, src/can
+ PeriodicScheduler · SharedSignal · timing analysis · os_port   ← include/core
+ CAN RX thread + queue · signal codec · CAN matrix · supervision ← include/can
         │                      │
  ───────────── ICanChannel (open/send/receive) ─────────────
    SocketCAN (vcan0)  │  UDP software bus  │  in-memory test bus
 ```
 
-## Measured results (Phase 1)
+## Measured results
 
-Recorded on 2026-10-20 on WSL2 (kernel 6.6.87.2), GCC 11.4. These are observations on a
+Recorded on WSL2 (kernel 6.6.87.2, 16 logical CPUs), GCC 11.4 / Clang 14. These are observations on a
 non-real-time OS, not guarantees.
 
 | Measurement | Result |
 |---|---|
-| Test suite | 72 tests: 70 passed, 2 skipped (need `vcan0`), 0 failed |
-| ASan + UBSan run of the same suite | no findings |
+| Test suite (2026-10-21) | 113 tests: 111 passed, 2 skipped (need `vcan0`), 0 failed |
+| ASan + UBSan / Clang ThreadSanitizer runs | no findings / no data races |
 | cppcheck / clang-tidy | no remaining findings |
-| Timeout detection for `0x100` (configured 100 ms, 10 runs) | 100.1 – 110.2 ms after the last frame |
-| Max lateness of the 10 ms loop tick (10 runs × 2 s) | 0.70 – 2.03 ms |
+| Timeout detection for `0x100` (configured 100 ms; Phase 1 loop, 10 runs) | 100.1 – 110.2 ms after the last frame |
+| Scheduler, light load, 10 s (`SCHED_OTHER`) | 0 deadline misses in 1599 activations; start latency mean 266–534 µs, max 1.7 ms |
+| Scheduler + 32 CPU-stress threads, 10 s | 2 deadline misses (10 ms task); max start latency 11–14 ms → needs RT priorities |
+| Overloaded 10 ms task (12 ms work), 10 s | all 832 activations flagged as misses, 167 releases dropped, other tasks unaffected |
+
+Details and method: [docs/phase2_scheduler.md](docs/phase2_scheduler.md#8-tests-and-measured-results).
 
 ## Repository layout
 
 ```
-include/ src/      libraries: core (clock, logger, RAII), can (stack + supervision)
+include/ src/      libraries: core (OS port, scheduler, timing, logger), can (stack, RX thread, supervision)
                    control/ diagnostics/ faults/ watchdog/ firmware/  ← later phases
 apps/              ECU executables (composition roots)
 simulator/         Python package (software-bus client; vehicle simulator in Phase 3)
@@ -96,6 +125,7 @@ docs/              per-phase engineering documentation
 ## Documentation
 
 - [Phase 1 — Development environment and virtual CAN](docs/phase1_virtual_can.md)
+- [Phase 2 — ECU scheduler](docs/phase2_scheduler.md)
 
 ## License
 

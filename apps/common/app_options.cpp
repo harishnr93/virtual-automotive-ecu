@@ -63,6 +63,14 @@ ParseOutcome parseOptions(int argc, const char* const* argv, AppOptions& options
       options.verbose = true;
       continue;
     }
+    if (arg == "--realtime") {
+      options.realtime = true;
+      continue;
+    }
+    if (arg == "--lock-memory") {
+      options.lock_memory = true;
+      continue;
+    }
     // All remaining options take exactly one value.
     if ((i + 1) >= argc) {
       error = "missing value for option " + std::string{arg};
@@ -82,6 +90,8 @@ ParseOutcome parseOptions(int argc, const char* const* argv, AppOptions& options
       ok = parseDouble(value, options.duration_s) && (options.duration_s >= 0.0);
     } else if (arg == "--log") {
       options.can_log_path = std::string{value};
+    } else if (arg == "--timing-report") {
+      options.timing_report_path = std::string{value};
     } else if (arg == "--mute-tx") {
       ok = parseWindow(value, options.mute_tx);
     } else {
@@ -107,6 +117,9 @@ void printUsage(std::string_view program, std::string_view description) {
       "  --duration SECONDS        stop after this time (default: run until Ctrl+C)\n"
       "  --log FILE                write a candump-format CAN trace\n"
       "  --mute-tx START:END       sensor ECU fault injection: stop sending 0x100 in [START,END) s\n"
+      "  --realtime                request SCHED_FIFO priorities (needs rtprio permission)\n"
+      "  --lock-memory             lock process memory in RAM (mlockall)\n"
+      "  --timing-report FILE      write scheduler timing statistics as JSON\n"
       "  --verbose                 debug logging\n"
       "  -h, --help                show this help\n",
       static_cast<int>(description.size()), description.data(), static_cast<int>(program.size()),

@@ -1,8 +1,14 @@
 # ---------------------------------------------------------------------------
-# vecu_core: platform utilities shared by every module (clock, logging, RAII).
+# vecu_core: platform services shared by every module: clock, logging, RAII helpers,
+# the OS port (threads, absolute sleep, priority-inheritance mutex) and the periodic
+# task scheduler with timing analysis.
 # ---------------------------------------------------------------------------
 add_library(vecu_core STATIC
-  core/logger.cpp)
+  core/logger.cpp
+  core/os_port_posix.cpp
+  core/timing_stats.cpp
+  core/periodic_scheduler.cpp
+  core/timing_report.cpp)
 target_include_directories(vecu_core PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_compile_features(vecu_core PUBLIC cxx_std_17)
 target_link_libraries(vecu_core
@@ -21,7 +27,8 @@ add_library(vecu_can STATIC
   can/udp_can_channel.cpp
   can/virtual_can_bus.cpp
   can/can_channel_factory.cpp
-  can/can_log_writer.cpp)
+  can/can_log_writer.cpp
+  can/can_receiver.cpp)
 target_include_directories(vecu_can
   PUBLIC ${PROJECT_SOURCE_DIR}/include
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

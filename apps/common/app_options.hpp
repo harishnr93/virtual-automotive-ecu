@@ -26,6 +26,9 @@ struct AppOptions {
   std::string can_log_path{}; ///< candump-format trace file (empty = no trace)
   bool verbose{false};        ///< debug logging
   MuteWindow mute_tx{};       ///< sensor ECU: suppress VehicleDynamics transmission
+  bool realtime{false};       ///< request SCHED_FIFO priorities for tasks and CAN RX thread
+  bool lock_memory{false};    ///< request mlockall()
+  std::string timing_report_path{};  ///< write scheduler timing as JSON
 };
 
 enum class ParseOutcome : std::uint8_t { Run, ShowHelp, Error };

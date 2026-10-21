@@ -22,6 +22,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 option(VECU_BUILD_TESTS "Build unit and integration tests" ON)
 option(VECU_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(VECU_ENABLE_SANITIZERS "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(VECU_ENABLE_TSAN "Build with ThreadSanitizer (data-race detection)" OFF)
 
 find_package(Threads REQUIRED)
 
@@ -42,10 +43,30 @@ endif()
 if(VECU_WARNINGS_AS_ERRORS)
   target_compile_options(vecu_compile_options INTERFACE -Werror)
 endif()
+if(VECU_ENABLE_SANITIZERS AND VECU_ENABLE_TSAN)
+  message(FATAL_ERROR "VECU_ENABLE_SANITIZERS (ASan) and VECU_ENABLE_TSAN cannot be combined")
+endif()
 if(VECU_ENABLE_SANITIZERS)
   target_compile_options(vecu_compile_options INTERFACE
     -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all)
   target_link_options(vecu_compile_options INTERFACE -fsanitize=address,undefined)
+endif()
+set(VECU_TEST_LAUNCHER "")
+if(VECU_ENABLE_TSAN)
+  target_compile_options(vecu_compile_options INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
+  target_link_options(vecu_compile_options INTERFACE -fsanitize=thread)
+  # GCC 11's TSan aborts ("unexpected memory mapping") on kernels with 32-bit mmap ASLR
+  # (Linux >= 6.5, including WSL2 6.6). Running the tests with ASLR disabled avoids it.
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12)
+    message(WARNING "GCC < 12 TSan does not intercept pthread_cond_clockwait (used by "
+                    "condition_variable::wait_for) and reports false 'double lock' errors. "
+                    "Prefer: CXX=clang++ cmake -DVECU_ENABLE_TSAN=ON ...")
+  endif()
+  find_program(VECU_SETARCH setarch)
+  if(VECU_SETARCH)
+    set(VECU_TEST_LAUNCHER ${VECU_SETARCH} ${CMAKE_SYSTEM_PROCESSOR} -R)
+    set(CMAKE_CROSSCOMPILING_EMULATOR ${VECU_TEST_LAUNCHER})  # used by gtest discovery and add_test
+  endif()
 endif()
 
 add_subdirectory(src)
