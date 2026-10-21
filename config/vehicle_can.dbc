@@ -32,6 +32,7 @@ BO_ 512 CruiseControlStatus: 8 CruiseECU
  SG_ ThrottleCommand : 0|16@1+ (0.01,0) [0|100] "%" VehicleSim
  SG_ CruiseState : 16|3@1+ (1,0) [0|4] "" VehicleSim
  SG_ CruiseTargetSpeed : 24|8@1+ (1,0) [0|200] "km/h" VehicleSim
+ SG_ CruiseFaultReason : 32|4@1+ (1,0) [0|15] "" VehicleSim
  SG_ AliveCounter : 56|4@1+ (1,0) [0|15] "" VehicleSim
 
 
@@ -53,3 +54,4 @@ BA_ "VECU_RxTimeoutMs" BO_ 272 250;
 BA_ "GenMsgCycleTime" BO_ 512 20;
 BA_ "VECU_RxTimeoutMs" BO_ 512 100;
 VAL_ 512 CruiseState 0 "Off" 1 "Standby" 2 "Active" 3 "Override" 4 "Fault" ;
+VAL_ 512 CruiseFaultReason 0 "None" 1 "SpeedSignalTimeout" 2 "DriverInputTimeout" 3 "SpeedInvalid" 4 "InputsStale" 5 "ControllerFault" ;

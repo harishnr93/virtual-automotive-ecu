@@ -1,0 +1,11 @@
+{
+  "name": "cruise_grade",
+  "description": "4 % uphill grade while cruising at 90 km/h",
+  "duration_s": 22,
+  "initial": {"speed_kph": 90, "accelerator_pct": "hold", "main_switch": true, "set_speed_kph": 90},
+  "events": [
+    {"t": 1.0, "set": true},
+    {"t": 1.3, "accelerator_pct": 0},
+    {"t": 6.0, "grade_pct": 4, "note": "road goes uphill"}
+  ]
+}

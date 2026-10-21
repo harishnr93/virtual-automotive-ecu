@@ -1,0 +1,15 @@
+{
+  "name": "cruise_driver_override",
+  "description": "accelerator override, resume, brake disengage, re-engage",
+  "duration_s": 20,
+  "initial": {"speed_kph": 80, "accelerator_pct": "hold", "main_switch": true, "set_speed_kph": 80},
+  "events": [
+    {"t": 1.0, "set": true},
+    {"t": 1.3, "accelerator_pct": 0},
+    {"t": 4.0, "accelerator_pct": 30, "note": "driver accelerates: Override"},
+    {"t": 7.0, "accelerator_pct": 0, "note": "pedal released: resume to 80 km/h"},
+    {"t": 12.0, "brake_pct": 20, "note": "brake: disengage to Standby"},
+    {"t": 12.5, "brake_pct": 0},
+    {"t": 15.0, "set": true, "note": "re-engage"}
+  ]
+}

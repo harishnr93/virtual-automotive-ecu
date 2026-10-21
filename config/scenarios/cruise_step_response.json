@@ -1,0 +1,10 @@
+{
+  "name": "cruise_step_response",
+  "description": "engage at 60 km/h with desired speed 80 km/h",
+  "duration_s": 22,
+  "initial": {"speed_kph": 60, "accelerator_pct": "hold", "main_switch": true, "set_speed_kph": 80},
+  "events": [
+    {"t": 1.0, "set": true, "note": "driver holds speed with the pedal and presses SET"},
+    {"t": 1.3, "accelerator_pct": 0, "note": "driver releases the pedal"}
+  ]
+}

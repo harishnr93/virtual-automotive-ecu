@@ -159,6 +159,7 @@ Signals (all Intel byte order):
 | 0x200 | ThrottleCommand | 0–15 | 0.01 / 0 | 0…100 | % |
 | 0x200 | CruiseState (0 Off, 1 Standby, 2 Active, 3 Override, 4 Fault) | 16–18 | 1 / 0 | 0…4 | |
 | 0x200 | CruiseTargetSpeed | 24–31 | 1 / 0 | 0…200 | km/h |
+| 0x200 | CruiseFaultReason (added in Phase 3; 0 None … 5 ControllerFault) | 32–35 | 1 / 0 | 0…15 | |
 
 The C++ tables in `vehicle_signals.hpp` are `constexpr` (read-only memory, like flash on
 an MCU). The unit test `VehicleSignals.MatchesDbcFile` parses the DBC and fails if the two

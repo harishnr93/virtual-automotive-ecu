@@ -16,13 +16,13 @@ firmware-update simulation and automated validation.
 |---|---|---|
 | 1 | Environment, CAN stack, two virtual ECUs, tests | ✅ done |
 | 2 | Periodic ECU scheduler (10/20/100 ms), timing measurement | ✅ done |
-| 3 | Python vehicle simulator, PID cruise control | ⏳ planned |
+| 3 | Python vehicle simulator, PID cruise control | ✅ done |
 | 4 | ISO-TP + UDS diagnostic server | ⏳ planned |
 | 5 | Fault management, DTCs, software watchdog | ⏳ planned |
 | 6 | Firmware update simulation (CRC32, A/B partitions, rollback) | ⏳ planned |
 | 7 | Regression suite, performance report, CI, documentation | ⏳ planned |
 
-## What works today (Phases 1–2)
+## What works today (Phases 1–3)
 
 - **CAN abstraction** `ICanChannel` with three interchangeable backends:
   - Linux **SocketCAN** (`vcan0` / real `can0`)
@@ -54,13 +54,26 @@ firmware-update simulation and automated validation.
 - **ECU task sets:**
   - cruise ECU: Control_10ms, Com_20ms, Diag_100ms
   - sensor ECU: Com_10ms, Diag_100ms
+- **Cruise control** (`src/control`, independent of CAN and threads):
+  - PID controller with saturation, anti-windup (clamping / back-calculation), derivative
+    filter, feedforward and bumpless transfer
+  - state machine: Off / Standby / Active / Override / Fault
+  - brake and accelerator override
+  - sensor-timeout, invalid-speed and stale-data handling, with a safe fallback to 0 % throttle
+  - recovery only to Standby, never straight back to Active
+- **Python vehicle simulator**:
+  - longitudinal dynamics: drag, rolling resistance, grade, power limit, actuator lag
+  - JSON driver/road/fault scenarios and actuator-side command arbitration
+  - reads the same DBC file as the ECU
+  - CSV, SVG and KPI reports, with no third-party packages
 - **Tooling**:
   - candump-format CAN traces
   - Python `vbus_dump.py` / `vbus_send.py` for the software bus
   - `vecu_sched_bench` scheduler benchmark
+  - `run_closed_loop.sh` (ECU + simulator)
   - environment check and demo script
 - **Quality**:
-  - 113 GoogleTest and pytest tests
+  - 150 CTest entries (GoogleTest and pytest), including real-time closed-loop system tests
   - strict warnings with `-Werror`
   - ASan/UBSan and Clang ThreadSanitizer builds
   - cppcheck and clang-tidy
@@ -78,12 +91,14 @@ ctest --test-dir build --output-on-failure
 ./scripts/run_demo.sh 5          # two ECUs talk for 5 s; logs + timing report
 ./scripts/vbus_dump.py           # (other terminal) watch the bus like candump
 ./build/bin/vecu_sched_bench --duration 10   # measure scheduler timing
+./scripts/run_closed_loop.sh                 # cruise ECU + vehicle simulator, 80 s demo
 ```
 
 ## Architecture
 
 ```
- vecu_sensor_ecu        vecu_cruise_ecu          ← applications: 10/20/100 ms tasks
+ vehicle simulator (Python) ◄── CAN ──► vecu_cruise_ecu: CruiseController (PID + state machine)
+ vecu_sensor_ecu (C++ test traffic)          ← applications: 10/20/100 ms tasks
         │                      │
  PeriodicScheduler · SharedSignal · timing analysis · os_port   ← include/core
  CAN RX thread + queue · signal codec · CAN matrix · supervision ← include/can
@@ -99,24 +114,32 @@ non-real-time OS, not guarantees.
 
 | Measurement | Result |
 |---|---|
-| Test suite (2026-10-21) | 113 tests: 111 passed, 2 skipped (need `vcan0`), 0 failed |
-| ASan + UBSan / Clang ThreadSanitizer runs | no findings / no data races |
+| Test suite (2026-10-21) | 150 CTest entries passed (2 vcan cases skipped inside the C++ suites), also under ASan/UBSan and Clang TSan |
 | cppcheck / clang-tidy | no remaining findings |
 | Timeout detection for `0x100` (configured 100 ms; Phase 1 loop, 10 runs) | 100.1 – 110.2 ms after the last frame |
 | Scheduler, light load, 10 s (`SCHED_OTHER`) | 0 deadline misses in 1599 activations; start latency mean 266–534 µs, max 1.7 ms |
 | Scheduler + 32 CPU-stress threads, 10 s | 2 deadline misses (10 ms task); max start latency 11–14 ms → needs RT priorities |
 | Overloaded 10 ms task (12 ms work), 10 s | all 832 activations flagged as misses, 167 releases dropped, other tasks unaffected |
 
-Details and method: [docs/phase2_scheduler.md](docs/phase2_scheduler.md#8-tests-and-measured-results).
+| Cruise step 60 → 80 km/h, real-time over CAN | overshoot 0.88 km/h, settling (±0.5 km/h) 8.15 s, steady-state error 0.03 km/h |
+| 4 % uphill grade at 90 km/h, over CAN | max speed drop 1.43 km/h, recovered in 8.6 s |
+| Speed message lost / speed invalid, over CAN | Fault and 0 % throttle after 120 ms / 40 ms; recovery to Standby only |
+| Brake / accelerator override, over CAN | reaction 40 ms (quantised by the 50 ms DriverInputs cycle) |
+
+Details and method: [scheduler](docs/phase2_scheduler.md#8-tests-and-measured-results),
+[cruise control](docs/phase3_cruise_control.md#7-tests-and-measured-results).
+
+![Full cruise demo: speed, target, throttle and cruise state](docs/images/phase3_full_demo.svg)
 
 ## Repository layout
 
 ```
-include/ src/      libraries: core (OS port, scheduler, timing, logger), can (stack, RX thread, supervision)
+include/ src/      libraries: core (OS port, scheduler, timing, logger), can (stack, RX thread,
+                   supervision), control (PID, cruise state machine)
                    control/ diagnostics/ faults/ watchdog/ firmware/  ← later phases
 apps/              ECU executables (composition roots)
-simulator/         Python package (software-bus client; vehicle simulator in Phase 3)
-config/            CAN matrix (DBC)
+simulator/         Python package: vehicle model, scenarios, DBC codec, CAN buses, KPI analysis
+config/            CAN matrix (DBC), closed-loop scenarios (JSON)
 tests/unit, tests/integration   GoogleTest + pytest
 scripts/           environment check, vcan setup, demo, bus tools, static analysis
 docs/              per-phase engineering documentation
@@ -126,6 +149,7 @@ docs/              per-phase engineering documentation
 
 - [Phase 1 — Development environment and virtual CAN](docs/phase1_virtual_can.md)
 - [Phase 2 — ECU scheduler](docs/phase2_scheduler.md)
+- [Phase 3 — Vehicle simulation and cruise control](docs/phase3_cruise_control.md)
 
 ## License
 

@@ -57,10 +57,11 @@ inline constexpr const SignalDef& kDriverInputsAlive = kDriverInputsSignals[6U];
 // ---------------------------------------------------------------------------
 // 0x200 CruiseControlStatus  (CruiseECU -> VehicleSim), 20 ms
 // ---------------------------------------------------------------------------
-inline constexpr std::array<SignalDef, 4U> kCruiseControlStatusSignals{{
+inline constexpr std::array<SignalDef, 5U> kCruiseControlStatusSignals{{
     {"ThrottleCommand", 0U, 16U, ByteOrder::LittleEndian, ValueType::Unsigned, 0.01, 0.0, 0.0, 100.0, "%"},
     {"CruiseState", 16U, 3U, ByteOrder::LittleEndian, ValueType::Unsigned, 1.0, 0.0, 0.0, 4.0, ""},
     {"CruiseTargetSpeed", 24U, 8U, ByteOrder::LittleEndian, ValueType::Unsigned, 1.0, 0.0, 0.0, 200.0, "km/h"},
+    {"CruiseFaultReason", 32U, 4U, ByteOrder::LittleEndian, ValueType::Unsigned, 1.0, 0.0, 0.0, 15.0, ""},
     {"AliveCounter", 56U, 4U, ByteOrder::LittleEndian, ValueType::Unsigned, 1.0, 0.0, 0.0, 15.0, ""},
 }};
 inline constexpr MessageDef kCruiseControlStatus{
@@ -69,7 +70,8 @@ inline constexpr MessageDef kCruiseControlStatus{
 inline constexpr const SignalDef& kThrottleCommand = kCruiseControlStatusSignals[0U];
 inline constexpr const SignalDef& kCruiseState = kCruiseControlStatusSignals[1U];
 inline constexpr const SignalDef& kCruiseTargetSpeed = kCruiseControlStatusSignals[2U];
-inline constexpr const SignalDef& kCruiseStatusAlive = kCruiseControlStatusSignals[3U];
+inline constexpr const SignalDef& kCruiseFaultReason = kCruiseControlStatusSignals[3U];
+inline constexpr const SignalDef& kCruiseStatusAlive = kCruiseControlStatusSignals[4U];
 
 /// Values of the CruiseState signal (DBC VAL_ table).
 enum class CruiseState : std::uint8_t { Off = 0U, Standby = 1U, Active = 2U, Override = 3U, Fault = 4U };

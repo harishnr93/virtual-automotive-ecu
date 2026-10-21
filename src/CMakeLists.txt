@@ -35,3 +35,14 @@ target_include_directories(vecu_can
 target_link_libraries(vecu_can
   PUBLIC vecu_core
   PRIVATE vecu_compile_options)
+
+# ---------------------------------------------------------------------------
+# vecu_control: control algorithms (PID, cruise control state machine).
+# Depends only on the C++ standard library — no CAN, no threads, no clocks.
+# ---------------------------------------------------------------------------
+add_library(vecu_control STATIC
+  control/pid_controller.cpp
+  control/cruise_controller.cpp)
+target_include_directories(vecu_control PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_compile_features(vecu_control PUBLIC cxx_std_17)
+target_link_libraries(vecu_control PRIVATE vecu_compile_options)

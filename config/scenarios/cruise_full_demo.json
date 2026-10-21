@@ -1,0 +1,17 @@
+{
+  "name": "cruise_full_demo",
+  "description": "manual drive, engage, speed change, uphill grade, brake",
+  "duration_s": 80,
+  "initial": {"speed_kph": 0, "main_switch": false, "set_speed_kph": 80},
+  "events": [
+    {"t": 1.0, "main_switch": true},
+    {"t": 2.0, "accelerator_pct": 40, "note": "driver accelerates manually"},
+    {"t": 18.0, "set": true, "note": "SET at ~50 km/h, desired speed 80 km/h"},
+    {"t": 18.3, "accelerator_pct": 0},
+    {"t": 40.0, "set_speed_kph": 100, "note": "driver raises the desired speed"},
+    {"t": 57.0, "grade_pct": 4},
+    {"t": 67.0, "grade_pct": 0},
+    {"t": 74.0, "brake_pct": 25, "note": "brake: cruise disengages"},
+    {"t": 75.0, "brake_pct": 0}
+  ]
+}
