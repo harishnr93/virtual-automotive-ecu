@@ -36,7 +36,7 @@ BO_ 512 CruiseControlStatus: 8 CruiseECU
  SG_ AliveCounter : 56|4@1+ (1,0) [0|15] "" VehicleSim
 
 
-CM_ "Virtual Automotive ECU Platform - educational CAN matrix (Classic CAN, 11-bit IDs). IDs 0x7E0/0x7E8 are reserved for UDS diagnostics over ISO-TP (Phase 4).";
+CM_ "Virtual Automotive ECU Platform - educational CAN matrix (Classic CAN, 11-bit IDs). UDS diagnostics over ISO-TP use 0x7E0 (physical request), 0x7DF (functional request) and 0x7E8 (response); they are transport frames and not described as signals here.";
 CM_ BO_ 256 "Vehicle motion state published by the vehicle simulator.";
 CM_ BO_ 272 "Driver pedal and cruise-control switch inputs.";
 CM_ BO_ 512 "Cruise control ECU output and state.";

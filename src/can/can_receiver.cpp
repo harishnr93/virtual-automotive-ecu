@@ -26,6 +26,24 @@ std::size_t CanRxQueue::size() const noexcept {
   return buffer_.size();
 }
 
+bool CanReceiver::addRoute(std::uint32_t id, CanRxQueue& queue) {
+  if (thread_.joinable() || (route_count_ >= kMaxRoutes)) {
+    return false;
+  }
+  routes_[route_count_] = Route{id, &queue};
+  ++route_count_;
+  return true;
+}
+
+CanRxQueue& CanReceiver::queueFor(std::uint32_t id) noexcept {
+  for (std::size_t i = 0U; i < route_count_; ++i) {
+    if (routes_[i].id == id) {
+      return *routes_[i].queue;
+    }
+  }
+  return queue_;
+}
+
 bool CanReceiver::start(const os::ThreadConfig& config) {
   if (thread_.joinable()) {
     return false;
@@ -47,7 +65,7 @@ void CanReceiver::run() {
       entry.rx_time = core::now();
       entry.wall_time_us = core::wallClockMicros();
       received_.fetch_add(1U, std::memory_order_relaxed);
-      (void)queue_.push(entry);  // overruns are counted by the queue
+      (void)queueFor(entry.frame.id).push(entry);  // overruns are counted by the queue
     } else if ((status != CanStatus::Timeout) && (status != CanStatus::InvalidFrame)) {
       errors_.fetch_add(1U, std::memory_order_relaxed);
       os::sleepUntil(core::now() + kPollInterval);  // avoid a busy loop on a persistent error

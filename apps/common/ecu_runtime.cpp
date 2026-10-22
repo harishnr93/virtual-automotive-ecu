@@ -82,6 +82,14 @@ bool EcuPlatform::addTask(sched::TaskConfig config, sched::TaskFunction function
   return true;
 }
 
+bool EcuPlatform::routeToDiagnostics(std::uint32_t id) {
+  if (!receiver_ || !receiver_->addRoute(id, diag_rx_queue_)) {
+    log_.error(core::strCat("cannot route ", can::formatId(id), " to diagnostics"));
+    return false;
+  }
+  return true;
+}
+
 std::string_view EcuPlatform::busName() const noexcept {
   return channel_ ? channel_->name() : std::string_view{"none"};
 }
@@ -134,7 +142,8 @@ int EcuPlatform::run() {
     log_.info(sched::formatTimingSummaryLine(task));
   }
   log_.info(core::strCat("CAN_RX_SUMMARY received=", receiver_->receivedFrames(),
-                         " errors=", receiver_->receiveErrors(), " queue_overruns=", rx_queue_.overruns()));
+                         " errors=", receiver_->receiveErrors(), " queue_overruns=", rx_queue_.overruns(),
+                         " diag_queue_overruns=", diag_rx_queue_.overruns()));
   if (!options_.timing_report_path.empty()) {
     std::ofstream file(options_.timing_report_path);
     file << sched::formatTimingJson(stats, ecu_name_, scheduler_.memoryLocked());

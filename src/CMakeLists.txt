@@ -46,3 +46,24 @@ add_library(vecu_control STATIC
 target_include_directories(vecu_control PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_compile_features(vecu_control PUBLIC cxx_std_17)
 target_link_libraries(vecu_control PRIVATE vecu_compile_options)
+
+# ---------------------------------------------------------------------------
+# vecu_faults: DTC memory with ISO 14229-1 status bits (fault manager: Phase 5).
+# ---------------------------------------------------------------------------
+add_library(vecu_faults STATIC
+  faults/dtc_store.cpp)
+target_include_directories(vecu_faults PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(vecu_faults
+  PUBLIC vecu_core
+  PRIVATE vecu_compile_options)
+
+# ---------------------------------------------------------------------------
+# vecu_diagnostics: ISO-TP transport (ISO 15765-2) and UDS server (ISO 14229-1).
+# ---------------------------------------------------------------------------
+add_library(vecu_diagnostics STATIC
+  diagnostics/isotp.cpp
+  diagnostics/uds_server.cpp)
+target_include_directories(vecu_diagnostics PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(vecu_diagnostics
+  PUBLIC vecu_can vecu_faults
+  PRIVATE vecu_compile_options)

@@ -89,7 +89,7 @@ def test_two_ecus_exchange_periodic_messages(backend, port):
 
     # Phase 2: every ECU runs on the periodic scheduler and reports measured timing.
     cruise_tasks = sched_summaries(cruise_log)
-    assert set(cruise_tasks) == {"Control_10ms", "Com_20ms", "Diag_100ms"}
+    assert set(cruise_tasks) == {"Control_10ms", "Dcm_10ms", "Com_20ms", "Diag_100ms"}
     assert abs(cruise_tasks["Control_10ms"]["activations"] - 300) <= 5   # 3.0 s / 10 ms
     assert abs(cruise_tasks["Com_20ms"]["activations"] - 150) <= 3
     assert set(sched_summaries(sensor_log)) == {"Com_10ms", "Diag_100ms"}

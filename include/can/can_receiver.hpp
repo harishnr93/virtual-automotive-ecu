@@ -8,8 +8,10 @@
 //
 //   bus ──► CanReceiver thread ──push──► CanRxQueue ──pop──► COM task (20 ms)
 //            (ISR analogue,             (bounded,           (decode, supervise)
-//             timestamps frames)         overrun counted)
+//             timestamps frames,         overrun counted)
+//             routes by CAN ID) ───────► diagnostic queue ──► Dcm task (10 ms)
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -56,6 +58,10 @@ class CanReceiver {
   CanReceiver(CanReceiver&&) = delete;
   CanReceiver& operator=(CanReceiver&&) = delete;
 
+  /// Routes frames with identifier `id` to `queue` instead of the default queue (like AUTOSAR
+  /// CanIf routing, e.g. diagnostic requests to the diagnostic task). Before start() only.
+  [[nodiscard]] bool addRoute(std::uint32_t id, CanRxQueue& queue);
+
   [[nodiscard]] bool start(const os::ThreadConfig& config);
   /// Returns within one receive poll interval (kPollInterval).
   void stop() noexcept;
@@ -65,12 +71,21 @@ class CanReceiver {
   [[nodiscard]] os::SchedulingClass schedulingClass() const noexcept { return thread_.schedulingClass(); }
 
   static constexpr std::chrono::milliseconds kPollInterval{20};
+  static constexpr std::size_t kMaxRoutes = 4U;
 
  private:
+  struct Route {
+    std::uint32_t id{0U};
+    CanRxQueue* queue{nullptr};
+  };
+
   void run();
+  [[nodiscard]] CanRxQueue& queueFor(std::uint32_t id) noexcept;
 
   ICanChannel& channel_;
   CanRxQueue& queue_;
+  std::array<Route, kMaxRoutes> routes_{};
+  std::size_t route_count_{0U};
   os::Thread thread_;
   std::atomic<bool> stop_requested_{false};
   std::atomic<std::uint64_t> received_{0U};

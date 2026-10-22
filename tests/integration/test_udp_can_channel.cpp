@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <thread>
 
 #include "can/can_channel_factory.hpp"
 
@@ -87,6 +88,38 @@ TEST(UdpCanChannel, PreservesOrderFromOneSender) {
     ASSERT_EQ(rx.receive(frame, milliseconds{500}), CanStatus::Ok);
     EXPECT_EQ(frame.data[0], i);
   }
+}
+
+TEST(UdpCanChannel, ConcurrentSendersAreSafe) {
+  // Since Phase 4 two ECU tasks (Com_20ms, Dcm_10ms) transmit on the same channel.
+  UdpCanChannel tx(isolatedBus());
+  UdpCanChannel rx(isolatedBus());
+  ASSERT_EQ(tx.open(), CanStatus::Ok);
+  ASSERT_EQ(rx.open(), CanStatus::Ok);
+  constexpr int kPerThread = 300;
+  auto sender = [&tx](std::uint32_t id) {
+    for (int i = 0; i < kPerThread; ++i) {
+      CanFrame frame = testFrame(id);
+      frame.data[0] = static_cast<std::uint8_t>(i & 0xFF);
+      frame.data[7] = static_cast<std::uint8_t>(~frame.data[0]);  // integrity check byte
+      while (tx.send(frame) == CanStatus::TxBufferFull) {
+      }
+    }
+  };
+  std::thread a(sender, 0x100U);
+  std::thread b(sender, 0x7E8U);
+  int count_a = 0;
+  int count_b = 0;
+  CanFrame frame;
+  while ((count_a + count_b) < 2 * kPerThread && rx.receive(frame, milliseconds{500}) == CanStatus::Ok) {
+    ASSERT_EQ(frame.data[7], static_cast<std::uint8_t>(~frame.data[0]));  // never corrupted
+    (frame.id == 0x100U ? count_a : count_b)++;
+  }
+  a.join();
+  b.join();
+  EXPECT_EQ(count_a, kPerThread);
+  EXPECT_EQ(count_b, kPerThread);
+  EXPECT_EQ(tx.stats().tx_frames, 2U * kPerThread);
 }
 
 TEST(UdpCanChannel, ReceiveTimesOutWithoutTraffic) {

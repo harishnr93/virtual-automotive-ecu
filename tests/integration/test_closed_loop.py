@@ -73,9 +73,11 @@ def test_communication_is_healthy(runs, name):
     assert summary["alive_errors"] == "0" and summary["invalid"] == "0", log
     assert "queue_overruns=0" in log
     sim = runs[name]["kpi"]["simulator"]
-    assert sim["late_steps"] == 0, sim  # simulator kept its 10 ms pace
+    # A stalled simulator invalidates the closed-loop measurement; late_at_s shows when the
+    # host stalled (a single 164 ms WSL stall was observed once, see docs/phase4_diagnostics.md).
+    assert sim["late_steps"] == 0, f"simulator missed its 10 ms pace (host stall): {sim}"
     misses = [int(m) for m in re.findall(r"SCHED_SUMMARY task=\S+ .*? deadline_misses=(\d+)", log)]
-    assert len(misses) == 3 and sum(misses) <= 2, log
+    assert len(misses) == 4 and sum(misses) <= 2, log  # Control, Dcm, Com, Diag
 
 
 def test_step_response_60_to_80(runs):

@@ -6,7 +6,7 @@
 //
 //   CAN RX thread (prio 90, event-driven)  ──► CanRxQueue
 //   PeriodicScheduler tasks (rate-monotonic priorities), e.g.
-//     Control_10ms (80) · Com_20ms (70) · Diag_100ms (50)
+//     Control_10ms (80) · Dcm_10ms (75) · Com_20ms (70) · Diag_100ms (50)
 //   main thread: start-up, waits for shutdown, prints the timing report
 //
 // Priority values only take effect when real-time scheduling is granted (--realtime and
@@ -31,11 +31,13 @@ namespace vecu::app {
 
 inline constexpr int kPriorityCanRx = 90;
 inline constexpr int kPriority10ms = 80;
+inline constexpr int kPriorityDcm10ms = 75;  ///< diagnostics, 10 ms (below control)
 inline constexpr int kPriority20ms = 70;
 inline constexpr int kPriority100ms = 50;
 
-/// Transmit path with counting and tracing. send() is called from one task only;
-/// the counters are atomic so other tasks can read them.
+/// Transmit path with counting and tracing. Thread-safe: since Phase 4 both Com_20ms and
+/// Dcm_10ms transmit (channel send() is concurrency-safe, counters are atomic, the trace
+/// writer locks a mutex).
 class CanIo {
  public:
   CanIo(can::ICanChannel& channel, can::CanLogWriter& trace) : channel_(channel), trace_(trace) {}
@@ -77,6 +79,10 @@ class EcuPlatform {
 
   [[nodiscard]] CanIo& io() noexcept { return *io_; }
   [[nodiscard]] can::CanRxQueue& rxQueue() noexcept { return rx_queue_; }
+  [[nodiscard]] can::CanRxQueue& diagRxQueue() noexcept { return diag_rx_queue_; }
+
+  /// Routes a CAN identifier to diagRxQueue() (call after init(), before run()).
+  [[nodiscard]] bool routeToDiagnostics(std::uint32_t id);
   [[nodiscard]] const sched::PeriodicScheduler& scheduler() const noexcept { return scheduler_; }
   [[nodiscard]] std::string_view busName() const noexcept;
   [[nodiscard]] const core::Logger& log() const noexcept { return log_; }
@@ -92,6 +98,7 @@ class EcuPlatform {
   can::CanLogWriter trace_;
   std::unique_ptr<CanIo> io_;
   can::CanRxQueue rx_queue_;
+  can::CanRxQueue diag_rx_queue_;
   std::unique_ptr<can::CanReceiver> receiver_;
   sched::PeriodicScheduler scheduler_;
   std::array<std::uint64_t, sched::kMaxTasks> reported_misses_{};

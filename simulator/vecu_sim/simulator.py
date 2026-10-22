@@ -137,6 +137,7 @@ def run_realtime(sim: VehicleSimulator, bus, duration_s: float) -> Dict[str, flo
     start = time.monotonic()
     max_lateness = 0.0
     late_steps = 0
+    late_at = []  # simulated times of late steps (diagnostics of host stalls)
     for k in range(steps):
         release = start + k * STEP_S
         delay = release - time.monotonic()
@@ -144,12 +145,15 @@ def run_realtime(sim: VehicleSimulator, bus, duration_s: float) -> Dict[str, flo
             time.sleep(delay)
         lateness = time.monotonic() - release
         max_lateness = max(max_lateness, lateness)
-        late_steps += lateness > STEP_S
+        if lateness > STEP_S:
+            late_steps += 1
+            if len(late_at) < 10:
+                late_at.append(round(k * STEP_S, 2))
         while (frame := bus.recv(timeout=0.0)) is not None:
             sim.on_frame(frame, sim.t)
         for frame in sim.step():
             bus.send(frame)
-    return {"max_step_lateness_ms": max_lateness * 1000.0, "late_steps": late_steps}
+    return {"max_step_lateness_ms": max_lateness * 1000.0, "late_steps": late_steps, "late_at_s": late_at}
 
 
 def write_csv(records: List[Dict[str, float]], path: Path) -> None:

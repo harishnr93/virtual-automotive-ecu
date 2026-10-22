@@ -26,8 +26,10 @@ struct CanChannelStats {
 /// applications) is identical regardless of whether frames travel over Linux SocketCAN,
 /// the UDP software bus, or the in-memory test bus.
 ///
-/// Thread-safety: send() and receive() may be called concurrently from different
-/// threads. open()/close() must not race with send()/receive().
+/// Thread-safety: send() may be called concurrently from several threads, also while another
+/// thread is in receive() (in send(), all backends use only local buffers, one system call per
+/// frame, atomic counters and, for the in-memory bus, a mutex). open()/close() must not race
+/// with send()/receive(). Covered by the test UdpCanChannel.ConcurrentSendersAreSafe.
 class ICanChannel {
  public:
   virtual ~ICanChannel() = default;
