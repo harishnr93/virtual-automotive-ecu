@@ -52,6 +52,22 @@ struct ActivationInfo {
 
 using TaskFunction = std::function<void(const ActivationInfo&)>;
 
+/// Optional observer of task activations (e.g. the software watchdog). Called from the task
+/// threads, so implementations must be thread-safe, non-blocking and fast.
+class ITaskObserver {
+ public:
+  virtual ~ITaskObserver() = default;
+  virtual void onActivationStart(std::size_t task_index, core::TimePoint now) noexcept = 0;
+  virtual void onActivationEnd(std::size_t task_index, core::TimePoint now) noexcept = 0;
+
+ protected:
+  ITaskObserver() = default;
+  ITaskObserver(const ITaskObserver&) = default;
+  ITaskObserver& operator=(const ITaskObserver&) = default;
+  ITaskObserver(ITaskObserver&&) = default;
+  ITaskObserver& operator=(ITaskObserver&&) = default;
+};
+
 enum class SchedulerStatus : std::uint8_t {
   Ok,
   InvalidConfig,
@@ -101,6 +117,9 @@ class PeriodicScheduler {
   /// Registers a task. Only allowed before start() (all allocation happens at init time).
   [[nodiscard]] SchedulerStatus addTask(TaskConfig config, TaskFunction function);
 
+  /// Registers an activation observer (before start(); nullptr removes it).
+  [[nodiscard]] SchedulerStatus setObserver(ITaskObserver* observer) noexcept;
+
   /// Creates the task threads and releases them at a common epoch.
   [[nodiscard]] SchedulerStatus start();
 
@@ -133,6 +152,7 @@ class PeriodicScheduler {
   std::vector<std::unique_ptr<Task>> tasks_;
   std::atomic<bool> running_{false};
   std::atomic<bool> stop_requested_{false};
+  ITaskObserver* observer_{nullptr};
 
   std::mutex start_mutex_;
   std::condition_variable start_cv_;

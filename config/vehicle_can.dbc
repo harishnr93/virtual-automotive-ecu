@@ -54,4 +54,4 @@ BA_ "VECU_RxTimeoutMs" BO_ 272 250;
 BA_ "GenMsgCycleTime" BO_ 512 20;
 BA_ "VECU_RxTimeoutMs" BO_ 512 100;
 VAL_ 512 CruiseState 0 "Off" 1 "Standby" 2 "Active" 3 "Override" 4 "Fault" ;
-VAL_ 512 CruiseFaultReason 0 "None" 1 "SpeedSignalTimeout" 2 "DriverInputTimeout" 3 "SpeedInvalid" 4 "InputsStale" 5 "ControllerFault" ;
+VAL_ 512 CruiseFaultReason 0 "None" 1 "SpeedSignalTimeout" 2 "DriverInputTimeout" 3 "SpeedInvalid" 4 "InputsStale" 5 "ControllerFault" 6 "FunctionInhibited" 7 "WatchdogSafeState" 8 "ControlOutputStale" ;

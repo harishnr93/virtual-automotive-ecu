@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <utility>
 
 #include "core/clock.hpp"
 #include "faults/dtc_store.hpp"
@@ -98,6 +99,10 @@ class UdsServer {
   std::size_t handleRequest(const std::uint8_t* request, std::size_t length, bool functional,
                             core::TimePoint now, std::uint8_t* response, std::size_t capacity);
 
+  /// Called after a successful 0x14 ClearDiagnosticInformation with the cleared group/DTC,
+  /// so the fault manager can restart qualification (ISO 14229-1: clearing resets test status).
+  void setClearHandler(std::function<void(faults::DtcCode)> handler) { clear_handler_ = std::move(handler); }
+
   /// Session supervision: falls back to the default session after S3 without requests.
   void poll(core::TimePoint now);
 
@@ -156,6 +161,7 @@ class UdsServer {
   Session session_{Session::Default};
   core::TimePoint last_request_{};
   std::optional<ResetType> pending_reset_{};
+  std::function<void(faults::DtcCode)> clear_handler_{};
   UdsStatistics stats_{};
 };
 

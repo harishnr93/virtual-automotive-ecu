@@ -210,6 +210,15 @@ TEST_F(UdsServerTest, ClearAllAndSingleDtc) {
   EXPECT_EQ(request({0x19U, 0x01U, 0x08U}), (Bytes{0x59U, 0x01U, 0x7FU, 0x01U, 0x00U, 0x00U}));
 }
 
+TEST_F(UdsServerTest, ClearHandlerReceivesClearedGroup) {
+  std::vector<faults::DtcCode> cleared;
+  server.setClearHandler([&cleared](faults::DtcCode code) { cleared.push_back(code); });
+  (void)request({0x14U, 0xFFU, 0xFFU, 0xFFU});
+  (void)request({0x14U, 0x40U, 0x31U, 0x64U});
+  (void)request({0x14U, 0x12U, 0x34U, 0x56U});  // unknown: NRC, handler not called
+  EXPECT_EQ(cleared, (std::vector<faults::DtcCode>{faults::kDtcGroupAll, kDtcPlausibility}));
+}
+
 TEST_F(UdsServerTest, ClearErrors) {
   EXPECT_EQ(request({0x14U, 0x12U, 0x34U, 0x56U}), nrc(0x14U, Nrc::RequestOutOfRange));
   EXPECT_EQ(request({0x14U, 0xFFU, 0xFFU}), nrc(0x14U, Nrc::IncorrectMessageLengthOrInvalidFormat));

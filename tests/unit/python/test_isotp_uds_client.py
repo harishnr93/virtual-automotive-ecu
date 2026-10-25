@@ -132,6 +132,39 @@ def test_uds_client_parses_responses_and_raises_nrcs():
         UdsClient(IsoTpEndpoint(wire.a), p2_client=0.05).request(bytes([0x3E, 0x00]))
 
 
+def test_client_flushes_stale_frames_before_a_request():
+    wire = Wire()
+    for _ in range(5):  # stale traffic queued while the tester was idle
+        wire.a.inbox.put(CanFrame(0x7E8, bytes([0x02, 0x7E, 0x00]).ljust(8, b"\xCC")))
+
+    def flush():
+        n = 0
+        while wire.a.recv(timeout=0.0) is not None:
+            n += 1
+        return n
+    wire.a.flush = flush
+    StubServer(wire.b, {bytes([0x22, 0x01, 0x00]): [bytes([0x62, 0x01, 0x00, 0x1F, 0x40])]})
+    client = UdsClient(IsoTpEndpoint(wire.a), p2_client=1.0)
+    assert client.read_data_by_identifier(0x0100) == {0x0100: b"\x1f\x40"}
+    assert wire.a.inbox.empty()
+
+
+def test_udp_bus_counts_kernel_drops_and_flushes(tmp_path):
+    import os
+    from vecu_sim.udp_can_bus import UdpCanBus
+    port = 40000 + (os.getpid() % 20000)
+    with UdpCanBus(port=port) as rx, UdpCanBus(port=port) as tx:
+        for _ in range(20000):
+            tx.send(CanFrame(0x123, b"\x01"))
+        import time
+        time.sleep(0.1)
+        queued = rx.flush()
+        tx.send(CanFrame(0x123, b"\x02"))  # drops are reported with the next queued frame
+        assert rx.recv(timeout=1.0) == CanFrame(0x123, b"\x02")
+        assert queued > 0 and rx.drops > 0
+        assert queued + rx.drops + 1 == 20001
+
+
 def test_dtc_formatting():
     assert dtc_to_text(0xC12187) == "U0121-87"
     assert dtc_to_text(0x403164) == "C0031-64"

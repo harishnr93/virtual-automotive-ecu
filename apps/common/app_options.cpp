@@ -90,6 +90,20 @@ ParseOutcome parseOptions(int argc, const char* const* argv, AppOptions& options
       ok = parseDouble(value, options.duration_s) && (options.duration_s >= 0.0);
     } else if (arg == "--log") {
       options.can_log_path = std::string{value};
+    } else if (arg == "--nvm") {
+      options.nvm_path = std::string{value};
+    } else if (arg == "--watchdog-action") {
+      if (value == "reset") {
+        options.watchdog_action = WatchdogAction::Reset;
+      } else if (value == "exit") {
+        options.watchdog_action = WatchdogAction::Exit;
+      } else if (value == "none") {
+        options.watchdog_action = WatchdogAction::None;
+      } else {
+        ok = false;
+      }
+    } else if (arg == "--inject") {
+      options.injections.emplace_back(value);
     } else if (arg == "--timing-report") {
       options.timing_report_path = std::string{value};
     } else if (arg == "--mute-tx") {
@@ -120,6 +134,13 @@ void printUsage(std::string_view program, std::string_view description) {
       "  --realtime                request SCHED_FIFO priorities (needs rtprio permission)\n"
       "  --lock-memory             lock process memory in RAM (mlockall)\n"
       "  --timing-report FILE      write scheduler timing statistics as JSON\n"
+      "  --nvm FILE                persistent fault memory (NVM simulation)\n"
+      "  --watchdog-action A       reset (default) | exit (code 75, external restart) | none\n"
+      "  --inject SPEC             TEST ONLY fault injection (repeatable):\n"
+      "                              stall:TASK:AT_S:DURATION_S    task blocks once\n"
+      "                              overrun:TASK:AT_S:DURATION_S:EXTRA_MS  extra run time\n"
+      "                              hang:TASK:AT_S                task blocks until shutdown\n"
+      "                              controller-nan:AT_S           corrupt controller step\n"
       "  --verbose                 debug logging\n"
       "  -h, --help                show this help\n",
       static_cast<int>(description.size()), description.data(), static_cast<int>(program.size()),

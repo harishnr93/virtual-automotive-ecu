@@ -13,6 +13,7 @@
 namespace vecu::can {
 namespace {
 
+using std::chrono::microseconds;
 using std::chrono::milliseconds;
 
 /// Each test process uses its own port, so parallel test runs never share a bus.
@@ -97,6 +98,8 @@ TEST(UdpCanChannel, ConcurrentSendersAreSafe) {
   ASSERT_EQ(tx.open(), CanStatus::Ok);
   ASSERT_EQ(rx.open(), CanStatus::Ok);
   constexpr int kPerThread = 300;
+  // Paced at one frame per 250 us per sender: together twice the frame rate of a fully
+  // loaded 500 kbit/s CAN bus (~4000 frames/s), i.e. realistic but demanding.
   auto sender = [&tx](std::uint32_t id) {
     for (int i = 0; i < kPerThread; ++i) {
       CanFrame frame = testFrame(id);
@@ -104,6 +107,7 @@ TEST(UdpCanChannel, ConcurrentSendersAreSafe) {
       frame.data[7] = static_cast<std::uint8_t>(~frame.data[0]);  // integrity check byte
       while (tx.send(frame) == CanStatus::TxBufferFull) {
       }
+      std::this_thread::sleep_for(microseconds{250});
     }
   };
   std::thread a(sender, 0x100U);
@@ -117,9 +121,37 @@ TEST(UdpCanChannel, ConcurrentSendersAreSafe) {
   }
   a.join();
   b.join();
-  EXPECT_EQ(count_a, kPerThread);
-  EXPECT_EQ(count_b, kPerThread);
   EXPECT_EQ(tx.stats().tx_frames, 2U * kPerThread);
+  // Every frame is accounted for: received, or counted as a receive-queue drop.
+  EXPECT_EQ(static_cast<std::uint64_t>(count_a + count_b) + rx.stats().rx_overruns, 2U * kPerThread);
+  EXPECT_EQ(rx.stats().rx_overruns, 0U) << "receiver could not keep up at a realistic bus load";
+}
+
+TEST(UdpCanChannel, KernelQueueDropsAreCountedAsOverruns) {
+  // A receiver that does not read for a while loses frames when its socket queue is full,
+  // like a CAN controller with full mailboxes. The loss must be visible, never silent.
+  UdpCanChannel tx(isolatedBus());
+  UdpCanChannel rx(isolatedBus());
+  ASSERT_EQ(tx.open(), CanStatus::Ok);
+  ASSERT_EQ(rx.open(), CanStatus::Ok);
+  constexpr std::uint64_t kSent = 20000U;
+  for (std::uint64_t i = 0U; i < kSent; ++i) {
+    while (tx.send(testFrame(0x123U)) == CanStatus::TxBufferFull) {
+    }
+  }
+  std::this_thread::sleep_for(milliseconds{100});
+  std::uint64_t received = 0U;
+  CanFrame frame;
+  while (rx.receive(frame, milliseconds{50}) == CanStatus::Ok) {
+    ++received;
+  }
+  // The kernel reports drops together with the next frame that is queued (SO_RXQ_OVFL
+  // semantics); with periodic traffic that is at most one cycle later.
+  ASSERT_EQ(tx.send(testFrame(0x123U)), CanStatus::Ok);
+  ASSERT_EQ(rx.receive(frame, milliseconds{500}), CanStatus::Ok);
+  ++received;
+  EXPECT_GT(rx.stats().rx_overruns, 0U);
+  EXPECT_EQ(received + rx.stats().rx_overruns, kSent + 1U);  // nothing lost silently
 }
 
 TEST(UdpCanChannel, ReceiveTimesOutWithoutTraffic) {

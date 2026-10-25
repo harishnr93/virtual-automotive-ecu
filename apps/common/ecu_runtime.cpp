@@ -3,6 +3,7 @@
 #include <array>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <utility>
 
@@ -44,6 +45,9 @@ EcuPlatform::EcuPlatform(std::string ecu_name, const AppOptions& options)
     : ecu_name_(std::move(ecu_name)), options_(options), log_(ecu_name_), scheduler_(schedulerConfig(options)) {}
 
 EcuPlatform::~EcuPlatform() {
+  watchdog_stop_ = true;
+  watchdog_thread_.join();
+  injector_.release();
   scheduler_.stop();
   if (receiver_) {
     receiver_->stop();
@@ -64,6 +68,16 @@ bool EcuPlatform::init() {
   }
   io_ = std::make_unique<CanIo>(*channel_, trace_);
   receiver_ = std::make_unique<can::CanReceiver>(*channel_, rx_queue_);
+  for (const std::string& spec : options_.injections) {
+    std::string error;
+    if (!injector_.add(spec, error)) {
+      log_.error(error);
+      return false;
+    }
+  }
+  if (!injector_.empty()) {
+    log_.warning(core::strCat("TEST MODE: ", injector_.injections().size(), " fault injection(s) armed"));
+  }
   return true;
 }
 
@@ -74,12 +88,109 @@ bool EcuPlatform::addTask(sched::TaskConfig config, sched::TaskFunction function
     return false;
   }
   const std::string name = config.name;
-  const sched::SchedulerStatus status = scheduler_.addTask(std::move(config), std::move(function));
+  const auto period = std::chrono::duration_cast<std::chrono::milliseconds>(config.period);
+  // Test-only injections run inside the task, before the application function.
+  sched::TaskFunction wrapped = [this, name, fn = std::move(function)](const sched::ActivationInfo& activation) {
+    injector_.beforeTask(name, secondsSinceEpoch(activation.release));
+    fn(activation);
+  };
+  const sched::SchedulerStatus status = scheduler_.addTask(std::move(config), std::move(wrapped));
   if (status != sched::SchedulerStatus::Ok) {
     log_.error(core::strCat("cannot add task '", name, "': ", sched::toString(status)));
     return false;
   }
+  // Watchdog entity index == scheduler task index (both registered here, in order).
+  watchdog::EntityConfig supervision;
+  supervision.name = name;
+  supervision.heartbeat_timeout = period * 3;
+  supervision.max_execution = period * 2;
+  supervision.failed_tolerance = 2U;
+  if (!watchdog_.addEntity(supervision)) {
+    log_.error(core::strCat("cannot supervise task '", name, "'"));
+    return false;
+  }
   return true;
+}
+
+double EcuPlatform::secondsSinceEpoch(core::TimePoint t) const noexcept {
+  return core::toMillis(t - scheduler_.epoch()) / 1000.0;
+}
+
+bool EcuPlatform::resumedAfter(const watchdog::CheckResult& expired, core::TimePoint since) const {
+  auto resumed = [this, since](std::size_t entity) {
+    return (watchdog_.lastHeartbeat(entity) > since) && !watchdog_.isExecuting(entity);
+  };
+  if (expired.violation != watchdog::Violation::ApplicationStalled) {
+    return resumed(expired.entity);
+  }
+  for (std::size_t i = 0U; i < watchdog_.size(); ++i) {
+    if (!resumed(i)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void EcuPlatform::runWatchdog() {
+  enum class Phase { Supervising, WaitingForResume, Probation };
+  Phase phase = Phase::Supervising;
+  watchdog::CheckResult expired;
+  core::TimePoint expired_at{};
+  core::TimePoint probation_end{};
+  core::TimePoint next = core::now();
+
+  while (!watchdog_stop_.load()) {
+    next += kWatchdogPeriod;
+    os::sleepUntil(next);
+    const core::TimePoint now = core::now();
+    if ((now - next) > (kWatchdogPeriod * 5)) {
+      next = now;  // resynchronise after a host stall
+    }
+    watchdog_last_check_ns_ = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+    const watchdog::CheckResult result = watchdog_.check(now);
+
+    if (result.newly_expired && (phase != Phase::WaitingForResume)) {
+      expired = result;
+      expired_at = now;
+      const std::string entity = watchdog_.name(result.entity);
+      log_.error(core::strCat("WATCHDOG_EXPIRED entity=", entity, " violation=", watchdog::toString(result.violation),
+                              " detail_ms=", fixed(core::toMillis(result.detail), 1),
+                              " t=", fixed(secondsSinceEpoch(now), 3), "s"));
+      if (watchdog_handlers_.on_expired) {
+        watchdog_handlers_.on_expired(result, entity);
+      }
+      phase = Phase::WaitingForResume;
+      continue;
+    }
+    if ((phase == Phase::WaitingForResume) && resumedAfter(expired, expired_at)) {
+      log_.warning(core::strCat("WATCHDOG_RESUMED entity=", watchdog_.name(expired.entity), " after_ms=",
+                                fixed(core::toMillis(now - expired_at), 1)));
+      if (watchdog_handlers_.on_resumed) {
+        watchdog_handlers_.on_resumed();
+      }
+      watchdog_.reset(now);
+      probation_end = now + kWatchdogProbation;
+      phase = Phase::Probation;
+    } else if ((phase == Phase::Probation) && (now >= probation_end) &&
+               (result.global == watchdog::SupervisionStatus::Ok)) {
+      log_.info("WATCHDOG_HEALTHY supervision ok after recovery");
+      if (watchdog_handlers_.on_healthy) {
+        watchdog_handlers_.on_healthy();
+      }
+      phase = Phase::Supervising;
+    } else {
+      // keep supervising / waiting
+    }
+  }
+}
+
+void EcuPlatform::emergencyExit(int exit_code) {
+  log_.error(core::strCat("EMERGENCY_EXIT code=", exit_code, " (simulated hardware reset: no orderly shutdown)"));
+  if (shutdown_hook_) {
+    shutdown_hook_(true);
+  }
+  (void)std::fflush(nullptr);
+  std::_Exit(exit_code);
 }
 
 bool EcuPlatform::routeToDiagnostics(std::uint32_t id) {
@@ -111,9 +222,22 @@ int EcuPlatform::run() {
     log_.error("cannot start CAN reception thread");
     return 1;
   }
+  (void)scheduler_.setObserver(&watchdog_);  // heartbeats / execution monitoring
   const sched::SchedulerStatus status = scheduler_.start();
   if (status != sched::SchedulerStatus::Ok) {
     log_.error(core::strCat("scheduler start failed: ", sched::toString(status)));
+    receiver_->stop();
+    return 1;
+  }
+  watchdog_.activate(scheduler_.epoch());
+  os::ThreadConfig watchdog_config;
+  watchdog_config.name = "Watchdog";
+  watchdog_config.priority = kPriorityWatchdog;
+  watchdog_config.request_realtime = options_.realtime;
+  watchdog_last_check_ns_ = std::chrono::duration_cast<std::chrono::nanoseconds>(core::now().time_since_epoch()).count();
+  if (!watchdog_thread_.start(watchdog_config, [this] { runWatchdog(); })) {
+    log_.error("cannot start watchdog thread");
+    scheduler_.stop();
     receiver_->stop();
     return 1;
   }
@@ -126,15 +250,29 @@ int EcuPlatform::run() {
                          " rx_thread=", os::toString(receiver_->schedulingClass()),
                          " memory_locked=", scheduler_.memoryLocked(), " (Ctrl+C to stop)"));
 
-  // The main thread only supervises run time; all ECU work happens in the tasks.
+  // The main thread supervises run time and the watchdog thread itself ("who watches the
+  // watchdog": on a real ECU this is the hardware watchdog triggered by the supervisor).
   const core::TimePoint start = core::now();
   const auto limit = std::chrono::duration<double>(options_.duration_s);
+  bool supervisor_stall_reported = false;
   while (!shutdownRequested() && ((options_.duration_s <= 0.0) || ((core::now() - start) < limit))) {
     os::sleepUntil(core::now() + std::chrono::milliseconds{10});
+    const auto last_check = std::chrono::nanoseconds{watchdog_last_check_ns_.load()};
+    const bool stalled = (core::now().time_since_epoch() - last_check) > std::chrono::milliseconds{500};
+    if (stalled && !supervisor_stall_reported) {
+      log_.error("WATCHDOG_SUPERVISOR_STALLED: no supervision cycle for > 500 ms");
+    }
+    supervisor_stall_reported = stalled;
   }
 
+  watchdog_stop_ = true;
+  watchdog_thread_.join();
+  injector_.release();  // end injected hangs so the task threads can be joined
   scheduler_.stop();
   receiver_->stop();
+  if (shutdown_hook_) {
+    shutdown_hook_(false);
+  }
 
   const std::vector<sched::TaskStatsSnapshot> stats = scheduler_.allTaskStats();
   log_.info(core::strCat("scheduler timing report (soft real-time, measured):\n", sched::formatTimingTable(stats)));
@@ -143,7 +281,10 @@ int EcuPlatform::run() {
   }
   log_.info(core::strCat("CAN_RX_SUMMARY received=", receiver_->receivedFrames(),
                          " errors=", receiver_->receiveErrors(), " queue_overruns=", rx_queue_.overruns(),
-                         " diag_queue_overruns=", diag_rx_queue_.overruns()));
+                         " diag_queue_overruns=", diag_rx_queue_.overruns(),
+                         " channel_drops=", channel_->stats().rx_overruns));
+  log_.info(core::strCat("WATCHDOG_SUMMARY expirations=", watchdog_.expirations(), " entities=", watchdog_.size(),
+                         " status=", watchdog::toString(watchdog_.globalStatus())));
   if (!options_.timing_report_path.empty()) {
     std::ofstream file(options_.timing_report_path);
     file << sched::formatTimingJson(stats, ecu_name_, scheduler_.memoryLocked());

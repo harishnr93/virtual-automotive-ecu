@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "can/can_channel_factory.hpp"
 
@@ -19,6 +20,13 @@ struct MuteWindow {
   }
 };
 
+/// Reaction of the ECU when the software watchdog expires (after entering the safe state).
+enum class WatchdogAction : std::uint8_t {
+  Reset,  ///< simulated in-process ECU reset once the stalled task responds again (default)
+  Exit,   ///< save NVM and terminate with exit code 75 so an external supervisor restarts the ECU
+  None    ///< safe state and DTC only
+};
+
 /// Command-line options shared by the virtual ECU executables.
 struct AppOptions {
   can::CanChannelConfig can{};
@@ -29,6 +37,9 @@ struct AppOptions {
   bool realtime{false};       ///< request SCHED_FIFO priorities for tasks and CAN RX thread
   bool lock_memory{false};    ///< request mlockall()
   std::string timing_report_path{};  ///< write scheduler timing as JSON
+  std::string nvm_path{};            ///< fault memory file (NVM simulation); empty = volatile
+  WatchdogAction watchdog_action{WatchdogAction::Reset};
+  std::vector<std::string> injections{};  ///< test-only fault injections (--inject, repeatable)
 };
 
 enum class ParseOutcome : std::uint8_t { Run, ShowHelp, Error };

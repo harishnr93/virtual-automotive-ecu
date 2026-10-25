@@ -49,6 +49,13 @@ class SocketCanBus:
             extended = bool(can_id & _CAN_EFF_FLAG)
             return CanFrame(can_id & (_CAN_EFF_MASK if extended else 0x7FF), data[:length], extended)
 
+    def flush(self) -> int:
+        """Discards all queued frames; returns how many."""
+        discarded = 0
+        while self.recv(timeout=0.0) is not None:
+            discarded += 1
+        return discarded
+
     def close(self) -> None:
         self._sock.close()
 

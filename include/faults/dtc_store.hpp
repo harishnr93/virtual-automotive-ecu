@@ -10,8 +10,10 @@
 //   bit 2 pendingDTC                         bit 6 testNotCompletedThisOperationCycle
 //   bit 3 confirmedDTC                       bit 7 warningIndicatorRequested (not supported)
 //
-// Phase 4 scope: a DTC is confirmed on its first failed test result. Fault debouncing,
-// confirmation counters, aging and persistence are added by the fault manager in Phase 5.
+// Test results come qualified (debounced) from the FaultManager (Phase 5). A DTC is confirmed
+// on its first qualified failure (confirmation threshold 1). Aging: a confirmed DTC that did
+// not fail for `aging_threshold` complete operation cycles loses its confirmed state.
+// Persistence across ECU restarts: snapshot(..., 0) / importRecords() + faults/nvm_storage.hpp.
 // Thread-safe: monitoring tasks report results while the diagnostic task reads/clears.
 
 #include <array>
@@ -45,11 +47,14 @@ struct DtcRecord {
   DtcCode code{0U};
   std::uint8_t status{dtc_status::kInitial};
   std::uint16_t occurrence_count{0U};  ///< transitions of testFailed 0 -> 1 since last clear
+  std::uint8_t aging_counter{0U};      ///< completed operation cycles without failure while confirmed
 };
 
 class DtcStore {
  public:
   static constexpr std::size_t kCapacity = 16U;
+
+  explicit DtcStore(std::uint8_t aging_threshold = 3U) noexcept : aging_threshold_(aging_threshold) {}
 
   /// Registers a supported DTC (initialisation phase). False if full, duplicate or > 24 bit.
   [[nodiscard]] bool registerDtc(DtcCode code);
@@ -60,8 +65,12 @@ class DtcStore {
   /// Clears one DTC, or all with kDtcGroupAll. False if the code is unknown.
   bool clear(DtcCode code_or_group) noexcept;
 
-  /// Starts a new operation cycle (e.g. ignition on / ECU hard reset).
+  /// Starts a new operation cycle (e.g. ignition on / ECU hard reset); also performs aging.
   void startOperationCycle() noexcept;
+
+  /// Restores status, occurrence and aging data of registered DTCs (unknown codes are ignored,
+  /// e.g. from an older software version). Returns the number of records restored.
+  std::size_t importRecords(const DtcRecord* records, std::size_t count) noexcept;
 
   [[nodiscard]] bool status(DtcCode code, std::uint8_t& status) const noexcept;
   [[nodiscard]] bool isSupported(DtcCode code) const noexcept;
@@ -77,6 +86,7 @@ class DtcStore {
   [[nodiscard]] const DtcRecord* find(DtcCode code) const noexcept;
   [[nodiscard]] static bool matches(const DtcRecord& record, std::uint8_t mask) noexcept;
 
+  std::uint8_t aging_threshold_;
   mutable os::PiMutex mutex_;
   std::array<DtcRecord, kCapacity> records_{};
   std::size_t count_{0U};

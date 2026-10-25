@@ -247,6 +247,8 @@ UdsServer::Outcome UdsServer::clearDiagnosticInformation(const std::uint8_t* req
                               (static_cast<std::uint32_t>(req[2]) << 8U) | req[3];
   if (!dtcs_.clear(group)) {
     outcome.nrc = Nrc::RequestOutOfRange;
+  } else if (clear_handler_) {
+    clear_handler_(group);
   }
   return outcome;  // positive response: 0x54 only
 }

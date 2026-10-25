@@ -17,6 +17,8 @@ struct CanChannelStats {
   std::uint64_t rx_frames{0U};    ///< frames delivered to the application
   std::uint64_t rx_rejected{0U};  ///< received data discarded (malformed, error/RTR frame)
   std::uint64_t rx_overruns{0U};  ///< frames lost because the receive queue was full
+                                  ///< (socket backends: kernel drop counter via SO_RXQ_OVFL,
+                                  ///<  updated when the next frame is received)
 };
 
 /// Application-facing CAN interface (a "CAN driver" abstraction, comparable to the

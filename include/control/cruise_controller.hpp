@@ -13,8 +13,8 @@
 //                                      │                            ┌──▼───────┐
 //                     inputs healthy   │                            │ Override │
 //                     for 500 ms       │                            └──────────┘
-//                                 ┌────┴──┐   any input fault (timeout, invalid speed,
-//                                 │ Fault │◄─ stale data, controller fault) from any state
+//                                 ┌────┴──┐   any input fault (timeout, invalid speed, stale
+//                                 │ Fault │◄─ data, controller fault, function inhibited)
 //                                 └───────┘
 //
 // Safety-oriented rules (educational, inspired by ISO 26262 practice — not a certified design):
@@ -38,7 +38,8 @@ enum class CruiseFault : std::uint8_t {
   DriverInputTimeout = 2U,
   SpeedInvalid = 3U,
   InputsStale = 4U,
-  ControllerFault = 5U
+  ControllerFault = 5U,
+  FunctionInhibited = 6U  ///< blocked by the fault manager (qualified fault not yet recovered)
 };
 
 [[nodiscard]] const char* toString(CruiseState state) noexcept;
@@ -65,6 +66,7 @@ struct CruiseInputs {
   bool speed_timeout{false};           ///< VehicleDynamics message timed out
   bool driver_inputs_timeout{false};   ///< DriverInputs message timed out
   bool inputs_stale{false};            ///< COM layer stopped updating the inputs
+  bool function_inhibited{false};      ///< fault manager / watchdog block the function
   bool main_switch{false};
   bool set_request{false};             ///< level; the controller detects the rising edge
   bool cancel_request{false};

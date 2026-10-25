@@ -26,7 +26,7 @@ from typing import Dict, List, Optional
 from . import analysis, svg_plot
 from .can_bus import open_bus
 from .dbc import Database, default_dbc_path
-from .scenario import Scenario
+from .scenario import SPEED_SPIKE_KPH, Scenario
 from .udp_can_bus import DEFAULT_GROUP, DEFAULT_PORT, CanFrame
 from .vehicle_model import VehicleModel, VehicleParams
 
@@ -97,12 +97,13 @@ class VehicleSimulator:
         frames: List[CanFrame] = []
         if self.step_index % self.dynamics_every == 0 and not self.scenario.active_fault(t, "mute_vehicle_dynamics"):
             valid = 0.0 if self.scenario.active_fault(t, "invalid_speed") else 1.0
-            data = self.msg_dynamics.encode({"VehicleSpeed": self.vehicle.speed_kph,
+            spike = SPEED_SPIKE_KPH if self.scenario.active_fault(t, "speed_spike") else 0.0
+            data = self.msg_dynamics.encode({"VehicleSpeed": self.vehicle.speed_kph + spike,
                                              "LongitudinalAccel": self.vehicle.accel_mps2,
                                              "VehicleSpeedValid": valid,
                                              "AliveCounter": self.alive["dynamics"]})
             frames.append(CanFrame(self.msg_dynamics.frame_id, data))
-        if self.step_index % self.dynamics_every == 0:
+        if self.step_index % self.dynamics_every == 0 and not self.scenario.active_fault(t, "freeze_alive"):
             self.alive["dynamics"] = (self.alive["dynamics"] + 1) % 16  # advances even if muted (lost frames)
         if self.step_index % self.driver_every == 0:
             if not self.scenario.active_fault(t, "mute_driver_inputs"):

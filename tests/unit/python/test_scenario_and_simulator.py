@@ -161,3 +161,21 @@ def test_svg_plot_is_well_formed_and_inside_canvas(tmp_path):
             assert 0 <= x <= width and 0 <= y <= height
     state_bands = [e for e in root.iter() if e.tag.endswith("rect") and e.get("opacity") == "0.25"]
     assert len(state_bands) == 2  # Standby, then Active
+
+
+def test_speed_spike_adds_impossible_jump():
+    sim = VehicleSimulator(scenario([{"t": 0.02, "fault": "speed_spike", "duration_s": 0.02}], speed_kph=80), DB)
+    speeds = []
+    for _ in range(6):
+        speeds += [DB.by_id(0x100).decode(f.data)["VehicleSpeed"] for f in sim.step() if f.can_id == 0x100]
+    assert speeds[0] == pytest.approx(80, abs=0.1)
+    assert speeds[1] == pytest.approx(110, abs=0.1)  # +30 km/h within 20 ms
+    assert speeds[2] == pytest.approx(80, abs=0.1)
+
+
+def test_freeze_alive_repeats_the_counter():
+    sim = VehicleSimulator(scenario([{"t": 0.02, "fault": "freeze_alive", "duration_s": 0.05}]), DB)
+    counters = []
+    for _ in range(10):
+        counters += [DB.by_id(0x100).decode(f.data)["AliveCounter"] for f in sim.step() if f.can_id == 0x100]
+    assert counters == [0, 1, 1, 1, 1]  # frozen from 20 ms to 70 ms

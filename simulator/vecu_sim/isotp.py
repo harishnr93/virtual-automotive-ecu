@@ -41,6 +41,11 @@ class IsoTpEndpoint:
         self.n_cr = n_cr
         self.max_wait_frames = max_wait_frames
 
+    def flush(self) -> int:
+        """Discards stale queued frames (the bus carries other traffic while the tester is idle)."""
+        flush = getattr(self.bus, "flush", None)
+        return flush() if flush else 0
+
     # ------------------------------------------------------------------------- frames ----
     def _send_frame(self, data: bytes, can_id: Optional[int] = None) -> None:
         self.bus.send(CanFrame(self.tx_id if can_id is None else can_id, bytes(data).ljust(8, bytes([self.padding]))))

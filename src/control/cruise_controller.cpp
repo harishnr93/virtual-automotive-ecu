@@ -41,6 +41,8 @@ const char* toString(CruiseFault fault) noexcept {
       return "InputsStale";
     case CruiseFault::ControllerFault:
       return "ControllerFault";
+    case CruiseFault::FunctionInhibited:
+      return "FunctionInhibited";
   }
   return "Unknown";
 }
@@ -70,6 +72,9 @@ CruiseFault CruiseController::detectFault(const CruiseInputs& inputs) const noex
   }
   if (!inputs.speed_valid || !std::isfinite(inputs.vehicle_speed_kph)) {
     return CruiseFault::SpeedInvalid;
+  }
+  if (inputs.function_inhibited) {
+    return CruiseFault::FunctionInhibited;  // most specific reasons are reported first
   }
   return CruiseFault::None;
 }
@@ -136,6 +141,7 @@ CruiseOutputs CruiseController::step(const CruiseInputs& inputs, double dt_s) no
       (detected != CruiseFault::None) &&
       ((state_ != CruiseState::Off) || (detected == CruiseFault::DriverInputTimeout) ||
        (detected == CruiseFault::InputsStale) || (detected == CruiseFault::ControllerFault) || inputs.main_switch);
+  // Note: FunctionInhibited while Off and switched off is not relevant (nothing to block).
 
   double throttle = 0.0;
   if (relevant_fault) {

@@ -20,6 +20,8 @@ FLAG_EXTENDED = 0x01
 WIRE = struct.Struct("<4sBBBBII8s")  # magic, version, flags, dlc, reserved, sender, id, data
 assert WIRE.size == 24
 
+SO_RXQ_OVFL = getattr(socket, "SO_RXQ_OVFL", 40)  # kernel drop counter (Linux)
+RECEIVE_BUFFER = 1 << 20                          # requested; the kernel caps it at 2 x rmem_max
 DEFAULT_GROUP = "239.255.0.1"
 DEFAULT_PORT = 47000
 MAX_STD_ID = 0x7FF
@@ -73,8 +75,11 @@ class UdpCanBus:
         self.port = port
         self.sender_id = random.getrandbits(32) or 1
 
+        self.drops = 0  # datagrams the kernel dropped because this receiver's queue was full
         self._rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._rx.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._rx.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, RECEIVE_BUFFER)
+        self._rx.setsockopt(socket.SOL_SOCKET, SO_RXQ_OVFL, 1)
         self._rx.bind((group, port))
         membership = socket.inet_aton(group) + socket.inet_aton("127.0.0.1")
         self._rx.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership)
@@ -93,13 +98,23 @@ class UdpCanBus:
             ready, _, _ = select.select([self._rx], [], [], timeout)
             if not ready:
                 return None
-            datagram = self._rx.recv(64)
+            datagram, ancillary, _, _ = self._rx.recvmsg(64, socket.CMSG_SPACE(4))
+            for level, kind, value in ancillary:
+                if level == socket.SOL_SOCKET and kind == SO_RXQ_OVFL:
+                    self.drops = int.from_bytes(value[:4], "little")
             try:
                 frame, sender = decode(datagram)
             except ValueError:
                 continue
             if sender != self.sender_id:
                 return frame
+
+    def flush(self) -> int:
+        """Discards all queued frames (e.g. before a new diagnostic request); returns how many."""
+        discarded = 0
+        while self.recv(timeout=0.0) is not None:
+            discarded += 1
+        return discarded
 
     def close(self) -> None:
         self._rx.close()

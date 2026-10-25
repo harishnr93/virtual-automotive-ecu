@@ -72,6 +72,9 @@ CanStatus UdpCanChannel::open() {
   ip_mreq membership{};
   membership.imr_multiaddr = group;
   membership.imr_interface = loopbackAddress();
+  const int receive_buffer = 1 << 20;  // ask for 1 MiB; the kernel caps it at 2 x rmem_max
+  (void)setOption(rx.get(), SOL_SOCKET, SO_RCVBUF, receive_buffer);
+  (void)detail::enableDropCounter(rx.get());  // kernel queue overflows become visible
   if (!setOption(rx.get(), SOL_SOCKET, SO_REUSEADDR, enable) ||  // several nodes share the port
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): BSD socket API
       (::bind(rx.get(), reinterpret_cast<const sockaddr*>(&bind_address), sizeof(bind_address)) != 0) ||
@@ -157,7 +160,9 @@ CanStatus UdpCanChannel::receive(CanFrame& frame, std::chrono::microseconds time
       return CanStatus::IoError;
     }
 
-    const ssize_t received = ::recv(rx_socket_.get(), buffer.data(), buffer.size(), MSG_DONTWAIT);
+    auto drops = static_cast<std::uint32_t>(counters_.rx_overruns.load(std::memory_order_relaxed));
+    const ssize_t received = detail::receiveWithDrops(rx_socket_.get(), buffer.data(), buffer.size(), drops);
+    counters_.rx_overruns.store(drops, std::memory_order_relaxed);  // cumulative kernel drop count
     if (received < 0) {
       const int error = errno;
       if ((error == EAGAIN) || (error == EINTR)) {

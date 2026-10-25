@@ -45,6 +45,7 @@ CanStatus SocketCanChannel::open() {
     return CanStatus::NotAvailable;
   }
 
+  (void)detail::enableDropCounter(fd.get());  // controller/queue overruns become visible
   socket_ = std::move(fd);
   return CanStatus::Ok;
 }
@@ -93,7 +94,9 @@ CanStatus SocketCanChannel::receive(CanFrame& frame, std::chrono::microseconds t
   }
 
   ::can_frame raw{};
-  const ssize_t received = ::recv(socket_.get(), &raw, sizeof(raw), MSG_DONTWAIT);
+  auto drops = static_cast<std::uint32_t>(counters_.rx_overruns.load(std::memory_order_relaxed));
+  const ssize_t received = detail::receiveWithDrops(socket_.get(), &raw, sizeof(raw), drops);
+  counters_.rx_overruns.store(drops, std::memory_order_relaxed);
   if (received < 0) {
     const int error = errno;
     if ((error == EAGAIN) || (error == EINTR)) {

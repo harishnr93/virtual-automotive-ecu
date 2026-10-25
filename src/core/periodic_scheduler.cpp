@@ -7,11 +7,13 @@
 namespace vecu::sched {
 
 struct PeriodicScheduler::Task {
-  Task(TaskConfig task_config, TaskFunction task_function)
-      : config(std::move(task_config)),
+  Task(std::size_t task_index, TaskConfig task_config, TaskFunction task_function)
+      : index(task_index),
+        config(std::move(task_config)),
         function(std::move(task_function)),
         monitor(config.deadline, config.budget) {}
 
+  std::size_t index;
   TaskConfig config;
   TaskFunction function;
   os::Thread thread;
@@ -94,7 +96,15 @@ SchedulerStatus PeriodicScheduler::addTask(TaskConfig config, TaskFunction funct
   if (config.deadline.count() == 0) {
     config.deadline = config.period;
   }
-  tasks_.push_back(std::make_unique<Task>(std::move(config), std::move(function)));
+  tasks_.push_back(std::make_unique<Task>(tasks_.size(), std::move(config), std::move(function)));
+  return SchedulerStatus::Ok;
+}
+
+SchedulerStatus PeriodicScheduler::setObserver(ITaskObserver* observer) noexcept {
+  if (running_) {
+    return SchedulerStatus::AlreadyRunning;
+  }
+  observer_ = observer;
   return SchedulerStatus::Ok;
 }
 
@@ -168,8 +178,14 @@ void PeriodicScheduler::runTask(Task& task) {
       break;
     }
     const core::TimePoint start = core::now();
+    if (observer_ != nullptr) {
+      observer_->onActivationStart(task.index, start);
+    }
     task.function(ActivationInfo{activation, release});
     const core::TimePoint end = core::now();
+    if (observer_ != nullptr) {
+      observer_->onActivationEnd(task.index, end);
+    }
 
     const NextRelease next = computeNextRelease(release, end, period);
     ActivationResult result;

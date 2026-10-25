@@ -101,7 +101,7 @@ def test_full_diagnostic_session(system):
     ident = client.read_data_by_identifier(0xF190, 0xF187, 0xF189)
     assert decode_did(0xF190, ident[0xF190]) == "VECUSIM0000000001"
     assert decode_did(0xF187, ident[0xF187]) == "VECU-CC-0001"
-    assert decode_did(0xF189, ident[0xF189]) == "00.04.00"
+    assert decode_did(0xF189, ident[0xF189]) == "00.05.00"  # software version of Phase 5
 
     # --- negative responses and session rules ----------------------------------------------
     expect_nrc(client, [0x22, 0xF1, 0x8C], 0x31)  # serial number: extended session only

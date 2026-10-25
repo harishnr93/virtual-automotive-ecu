@@ -17,7 +17,11 @@ Example:
 }
 
 Levels (accelerator, brake, grade, set speed, main switch) hold until changed.
-Buttons (set, cancel) are pulses of BUTTON_PULSE_S. Faults are active in [t, t + duration).
+Buttons (set, cancel) are pulses of BUTTON_PULSE_S. Faults are active in [t, t + duration):
+  mute_vehicle_dynamics / mute_driver_inputs  message not transmitted
+  invalid_speed                               VehicleSpeedValid = 0
+  speed_spike                                 transmitted speed + 30 km/h (physically impossible jump)
+  freeze_alive                                0x100 alive counter stops (stale sender)
 """
 
 from __future__ import annotations
@@ -28,7 +32,8 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 BUTTON_PULSE_S = 0.2
-FAULT_TYPES = ("mute_vehicle_dynamics", "mute_driver_inputs", "invalid_speed")
+FAULT_TYPES = ("mute_vehicle_dynamics", "mute_driver_inputs", "invalid_speed", "speed_spike", "freeze_alive")
+SPEED_SPIKE_KPH = 30.0  # added to the transmitted speed during a speed_spike fault
 _LEVELS = ("accelerator_pct", "brake_pct", "grade_pct", "set_speed_kph", "main_switch")
 
 

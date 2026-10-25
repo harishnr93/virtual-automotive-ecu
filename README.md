@@ -18,11 +18,11 @@ firmware-update simulation and automated validation.
 | 2 | Periodic ECU scheduler (10/20/100 ms), timing measurement | ✅ done |
 | 3 | Python vehicle simulator, PID cruise control | ✅ done |
 | 4 | ISO-TP + UDS diagnostic server | ✅ done |
-| 5 | Fault management, DTCs, software watchdog | ⏳ planned |
+| 5 | Fault management, DTCs, software watchdog | ✅ done |
 | 6 | Firmware update simulation (CRC32, A/B partitions, rollback) | ⏳ planned |
 | 7 | Regression suite, performance report, CI, documentation | ⏳ planned |
 
-## What works today (Phases 1–4)
+## What works today (Phases 1–5)
 
 - **CAN abstraction** `ICanChannel` with three interchangeable backends:
   - Linux **SocketCAN** (`vcan0` / real `can0`)
@@ -76,6 +76,24 @@ firmware-update simulation and automated validation.
     controller-fault monitors
   - **Python tester**: a separate ISO-TP/UDS implementation plus the `uds_tester.py`
     command-line tool
+- **Fault management** (AUTOSAR DEM/FiM-like, simplified):
+  - **monitors:** CAN message timeouts, sensor value plausibility (validity, range, gradient),
+    stale sensor data (frozen alive counter), task deadline misses, controller faults
+  - **qualification:** time- or counter-based debouncing, per-fault recovery conditions, latched
+    faults until the next operation cycle
+  - **reactions:** function inhibition, plus immediate signal-level rejection of bad values
+  - **DTC memory:** ISO 14229 status bits and aging, persisted in a CRC32-protected NVM file
+    with atomic writes
+  - **diagnostics:** UDS DIDs for active faults, watchdog status and reset reason
+- **Software watchdog** (not a hardware watchdog):
+  - **checks:** heartbeat, execution time and stalled-application supervision of every task, in
+    its own thread
+  - **reaction:** an immediate safe state (Fault / 0 % throttle transmitted by the COM task), then
+    a simulated reset or a real process restart (exit code 75)
+  - **stale-output check:** the COM task independently stops transmitting a frozen control output
+- **Test-only fault injection**:
+  - in the ECU: task stall, overrun, hang, controller NaN
+  - in the simulator: lost/invalid/spiking speed, frozen alive counter
 - **Tooling**:
   - candump-format CAN traces
   - Python `vbus_dump.py` / `vbus_send.py` for the software bus
@@ -84,7 +102,8 @@ firmware-update simulation and automated validation.
   - `uds_tester.py` (diagnostics)
   - environment check and demo script
 - **Quality**:
-  - 194 CTest entries (GoogleTest and pytest), including real-time closed-loop and diagnostic system tests
+  - 226 CTest entries (GoogleTest and pytest), including real-time closed-loop, diagnostic and
+    fault-injection system tests
   - strict warnings with `-Werror`
   - ASan/UBSan and Clang ThreadSanitizer builds
   - cppcheck and clang-tidy
@@ -127,7 +146,7 @@ non-real-time OS, not guarantees.
 
 | Measurement | Result |
 |---|---|
-| Test suite (2026-10-22) | 194 CTest entries passed (2 vcan cases skipped inside the C++ suites), also under ASan/UBSan and Clang TSan |
+| Test suite (2026-10-25) | 226 CTest entries passed (2 vcan cases skipped inside the C++ suites), also under ASan/UBSan and Clang TSan |
 | cppcheck / clang-tidy | no remaining findings |
 | Timeout detection for `0x100` (configured 100 ms; Phase 1 loop, 10 runs) | 100.1 – 110.2 ms after the last frame |
 | Scheduler, light load, 10 s (`SCHED_OTHER`) | 0 deadline misses in 1599 activations; start latency mean 266–534 µs, max 1.7 ms |
@@ -139,10 +158,15 @@ non-real-time OS, not guarantees.
 | Speed message lost / speed invalid, over CAN | Fault and 0 % throttle after 120 ms / 40 ms; recovery to Standby only |
 | Brake / accelerator override, over CAN | reaction 40 ms (quantised by the 50 ms DriverInputs cycle) |
 | UDS response time while cruising (300 requests each) | single-frame median 9.98 ms / max 10.57 ms; multi-frame median 19.97 ms / max 20.76 ms (P2 = 50 ms) |
+| Control task stalled for 400 ms | frozen output blocked on the bus after 41 ms; watchdog expired after 60 ms; safe state, reset, recovery |
+| Speed spike / frozen sensor counter | cruise Fault on the bus after 80–100 ms; DTCs C0031-64 / U0121-82 |
+| Task overrun (deadline misses) | fault qualified after 202 ms, healed 1.10 s after the overrun (configured 1 s) |
+| DTC memory across restarts | persisted; aged out after 3 fault-free operation cycles as configured |
 
 Details and method: [scheduler](docs/phase2_scheduler.md#8-tests-and-measured-results),
 [cruise control](docs/phase3_cruise_control.md#7-tests-and-measured-results),
-[diagnostics](docs/phase4_diagnostics.md#8-tests-and-measured-results).
+[diagnostics](docs/phase4_diagnostics.md#8-tests-and-measured-results),
+[fault management](docs/phase5_fault_management.md#8-measured-results-2026-10-25-wsl2-real-processes).
 
 ![Full cruise demo: speed, target, throttle and cruise state](docs/images/phase3_full_demo.svg)
 
@@ -151,12 +175,12 @@ Details and method: [scheduler](docs/phase2_scheduler.md#8-tests-and-measured-re
 ```
 include/ src/      libraries: core (OS port, scheduler, timing, logger), can (stack, RX thread,
                    supervision), control (PID, cruise state machine), diagnostics (ISO-TP,
-                   UDS server), faults (DTC memory)
-                   control/ diagnostics/ faults/ watchdog/ firmware/  ← later phases
+                   UDS server), faults (DTC memory, fault manager, NVM), watchdog
+                   firmware/  ← Phase 6
 apps/              ECU executables (composition roots)
 simulator/         Python package: vehicle model, scenarios, DBC codec, CAN buses, KPI analysis,
                    ISO-TP + UDS tester client
-config/            CAN matrix (DBC), closed-loop scenarios (JSON)
+config/            CAN matrix (DBC), closed-loop and fault scenarios (JSON)
 tests/unit, tests/integration   GoogleTest + pytest
 scripts/           environment check, vcan setup, demo, bus tools, static analysis
 docs/              per-phase engineering documentation
@@ -168,6 +192,7 @@ docs/              per-phase engineering documentation
 - [Phase 2 — ECU scheduler](docs/phase2_scheduler.md)
 - [Phase 3 — Vehicle simulation and cruise control](docs/phase3_cruise_control.md)
 - [Phase 4 — UDS diagnostics over ISO-TP](docs/phase4_diagnostics.md)
+- [Phase 5 — Fault management and watchdog](docs/phase5_fault_management.md)
 
 ## License
 

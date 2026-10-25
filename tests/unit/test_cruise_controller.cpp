@@ -196,6 +196,28 @@ TEST_F(CruiseControllerTest, SpeedFaultIgnoredWhileSwitchedOff) {
   EXPECT_EQ(step().state, CruiseState::Off);
 }
 
+TEST_F(CruiseControllerTest, FunctionInhibitionForcesFaultUntilReleasedPlusRecovery) {
+  step();
+  pressSet();
+  ASSERT_EQ(cruise.state(), CruiseState::Active);
+  in.function_inhibited = true;
+  CruiseOutputs out = step();
+  EXPECT_EQ(out.state, CruiseState::Fault);
+  EXPECT_EQ(out.fault, CruiseFault::FunctionInhibited);
+  EXPECT_DOUBLE_EQ(out.throttle_pct, 0.0);
+  EXPECT_EQ(step(100).state, CruiseState::Fault);  // held as long as inhibited
+  in.function_inhibited = false;
+  EXPECT_EQ(step(49).state, CruiseState::Fault);   // then the normal 500 ms debounce
+  EXPECT_EQ(step().state, CruiseState::Standby);
+}
+
+TEST_F(CruiseControllerTest, SpecificFaultReasonWinsOverInhibition) {
+  step();
+  in.function_inhibited = true;
+  in.speed_timeout = true;
+  EXPECT_EQ(step().fault, CruiseFault::SpeedSignalTimeout);
+}
+
 TEST_F(CruiseControllerTest, InvalidTimeStepLatchesControllerFault) {
   step();
   const CruiseOutputs out = cruise.step(in, std::numeric_limits<double>::quiet_NaN());

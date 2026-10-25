@@ -7,13 +7,16 @@
 //   CAN RX thread (prio 90, event-driven)  ──► CanRxQueue
 //   PeriodicScheduler tasks (rate-monotonic priorities), e.g.
 //     Control_10ms (80) · Dcm_10ms (75) · Com_20ms (70) · Diag_100ms (50)
-//   main thread: start-up, waits for shutdown, prints the timing report
+//   Watchdog thread (prio 95, 20 ms): software watchdog supervision of all tasks
+//   main thread: start-up, checks that the watchdog thread itself is alive, shutdown, reports
 //
 // Priority values only take effect when real-time scheduling is granted (--realtime and
 // rtprio permission); otherwise all threads use SCHED_OTHER and this is reported.
 
 #include <array>
 #include <atomic>
+#include <chrono>
+#include <functional>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -24,11 +27,15 @@
 #include "can/i_can_channel.hpp"
 #include "can/message_timeout_monitor.hpp"
 #include "common/app_options.hpp"
+#include "common/fault_injector.hpp"
 #include "core/logger.hpp"
+#include "core/os_port.hpp"
 #include "core/periodic_scheduler.hpp"
+#include "watchdog/watchdog_supervisor.hpp"
 
 namespace vecu::app {
 
+inline constexpr int kPriorityWatchdog = 95;
 inline constexpr int kPriorityCanRx = 90;
 inline constexpr int kPriority10ms = 80;
 inline constexpr int kPriorityDcm10ms = 75;  ///< diagnostics, 10 ms (below control)
@@ -55,8 +62,19 @@ class CanIo {
   std::atomic<std::uint64_t> tx_failed_{0U};
 };
 
+/// Callbacks for the watchdog recovery sequence (all called from the watchdog thread):
+///   on_expired  - supervision expired: enter the safe state immediately
+///   on_resumed  - the stalled task(s) run again: perform the recovery action (e.g. reset)
+///   on_healthy  - 200 ms of healthy supervision after recovery: leave the safe state
+struct WatchdogHandlers {
+  std::function<void(const watchdog::CheckResult&, const std::string& entity)> on_expired;
+  std::function<void()> on_resumed;
+  std::function<void()> on_healthy;
+};
+
 /// Owns the platform services of one virtual ECU: CAN channel, trace, RX thread + queue,
-/// and the task scheduler. The ECU application registers its tasks, then calls run().
+/// task scheduler, software watchdog and (test-only) fault injection. The ECU application
+/// registers its tasks, then calls run().
 class EcuPlatform {
  public:
   EcuPlatform(std::string ecu_name, const AppOptions& options);
@@ -70,7 +88,8 @@ class EcuPlatform {
   /// Opens the CAN channel and trace file. Returns false (after logging) on failure.
   [[nodiscard]] bool init();
 
-  /// Registers a periodic task; logs and returns false on invalid configuration.
+  /// Registers a periodic task and its watchdog supervision (heartbeat timeout = 3 periods,
+  /// max. execution = 2 periods, tolerance = 2 supervision cycles); false on invalid config.
   [[nodiscard]] bool addTask(sched::TaskConfig config, sched::TaskFunction function);
 
   /// Starts the RX thread and the scheduler, blocks until Ctrl+C / SIGTERM or the configured
@@ -90,6 +109,22 @@ class EcuPlatform {
   /// Called from a diagnostic task: logs "DEADLINE_MISS" for tasks whose miss counter grew.
   void reportNewDeadlineMisses();
 
+  void setWatchdogHandlers(WatchdogHandlers handlers) { watchdog_handlers_ = std::move(handlers); }
+  /// Called on shutdown (emergency = true when terminating after a watchdog expiration).
+  void setShutdownHook(std::function<void(bool emergency)> hook) { shutdown_hook_ = std::move(hook); }
+  /// Terminates immediately like a hardware reset: runs the shutdown hook (e.g. NVM write),
+  /// then std::_Exit without joining threads (a hung task thread cannot be joined).
+  [[noreturn]] void emergencyExit(int exit_code);
+
+  [[nodiscard]] const watchdog::WatchdogSupervisor& watchdog() const noexcept { return watchdog_; }
+  [[nodiscard]] FaultInjector& injector() noexcept { return injector_; }
+  [[nodiscard]] const AppOptions& options() const noexcept { return options_; }
+  /// Seconds since the scheduler epoch for a task activation (used for injections).
+  [[nodiscard]] double secondsSinceEpoch(core::TimePoint t) const noexcept;
+
+  static constexpr std::chrono::milliseconds kWatchdogPeriod{20};
+  static constexpr std::chrono::milliseconds kWatchdogProbation{200};
+
  private:
   std::string ecu_name_;
   AppOptions options_;
@@ -102,6 +137,17 @@ class EcuPlatform {
   std::unique_ptr<can::CanReceiver> receiver_;
   sched::PeriodicScheduler scheduler_;
   std::array<std::uint64_t, sched::kMaxTasks> reported_misses_{};
+
+  void runWatchdog();
+  [[nodiscard]] bool resumedAfter(const watchdog::CheckResult& expired, core::TimePoint since) const;
+
+  watchdog::WatchdogSupervisor watchdog_;
+  WatchdogHandlers watchdog_handlers_;
+  os::Thread watchdog_thread_;
+  std::atomic<bool> watchdog_stop_{false};
+  std::atomic<std::int64_t> watchdog_last_check_ns_{0};
+  std::function<void(bool)> shutdown_hook_;
+  FaultInjector injector_;
 };
 
 /// Logs a reception-supervision event in a stable, machine-parseable form, e.g.

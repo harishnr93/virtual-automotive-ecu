@@ -28,7 +28,7 @@ NRC_NAMES = {
 class Did:
     name: str
     length: int
-    kind: str          # "ascii" | "uint"
+    kind: str          # "ascii" | "uint" | "bytes"
     scale: float = 1.0
     unit: str = ""
 
@@ -47,13 +47,26 @@ DIDS: Dict[int, Did] = {
     0x0200: Did("DeadlineMissesTotal", 4, "uint"),      # extended session only
     0x0201: Did("UptimeSeconds", 4, "uint", 1.0, "s"),
     0x0202: Did("ResetCount", 2, "uint"),
+    0x0300: Did("ActiveFaultsMask", 2, "uint"),
+    0x0301: Did("WatchdogStatus", 3, "bytes"),          # status (0 Ok, 1 Failed, 2 Expired) + expirations u16
+    0x0302: Did("LastResetReason", 1, "uint"),          # 0 PowerOn, 1 UDS hard, 2 UDS soft, 3 watchdog
+    0x0303: Did("OperationCycleCounter", 4, "uint"),
+    0x0304: Did("NvmLoadStatus", 1, "uint"),            # 0 Ok, 1 NotFound, 2 Corrupted, 3 IoError
 }
+
+FAULT_NAMES = ["SpeedMessageTimeout", "DriverInputsTimeout", "SpeedSignalInvalid", "SpeedSignalStale",
+               "TaskDeadlineMiss", "ControllerFault", "WatchdogExpired", "NvmCorrupted"]
+RESET_REASONS = {0: "PowerOn", 1: "UdsHardReset", 2: "UdsSoftReset", 3: "Watchdog"}
 
 DTCS = {
     0xC12187: "U0121-87 VehicleDynamics (0x100) message missing",
     0xC14087: "U0140-87 DriverInputs (0x110) message missing",
     0x403164: "C0031-64 vehicle speed signal plausibility failure",
     0xF00049: "U3000-49 cruise controller internal failure",
+    0xC12182: "U0121-82 vehicle speed signal stale (alive counter not updated)",
+    0xF00048: "U3000-48 task deadline misses (supervision software failure)",
+    0xF00047: "U3000-47 software watchdog expired",
+    0xF00044: "U3000-44 fault memory (NVM) corrupted",
 }
 
 DTC_STATUS_BITS = ["testFailed", "testFailedThisOperationCycle", "pendingDTC", "confirmedDTC",
@@ -88,6 +101,9 @@ class UdsClient:
 
     def request(self, payload: bytes, functional: bool = False, expect_response: bool = True) -> Optional[bytes]:
         payload = bytes(payload)
+        # Discard traffic queued while the tester was idle: otherwise a full receive queue can
+        # drop the response (seen with > 5 s idle time on the UDP software bus).
+        self.isotp.flush()
         start = time.perf_counter()
         self.isotp.send(payload, FUNCTIONAL_ID if functional else None)
         if not expect_response:
@@ -154,5 +170,7 @@ def decode_did(did: int, raw: bytes):
     description = DIDS[did]
     if description.kind == "ascii":
         return raw.decode("ascii")
+    if description.kind == "bytes":
+        return raw
     value = int.from_bytes(raw, "big") * description.scale
     return value if description.scale != 1.0 else int(value)

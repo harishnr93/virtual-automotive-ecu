@@ -24,8 +24,11 @@ add_executable(vecu_unit_tests
   unit/test_cruise_closed_loop.cpp
   unit/test_dtc_store.cpp
   unit/test_isotp.cpp
-  unit/test_uds_server.cpp)
-target_link_libraries(vecu_unit_tests PRIVATE vecu_can vecu_control vecu_diagnostics GTest::gtest_main vecu_compile_options)
+  unit/test_uds_server.cpp
+  unit/test_fault_manager.cpp
+  unit/test_nvm_and_aging.cpp
+  unit/test_watchdog.cpp)
+target_link_libraries(vecu_unit_tests PRIVATE vecu_can vecu_control vecu_diagnostics vecu_watchdog GTest::gtest_main vecu_compile_options)
 target_include_directories(vecu_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_compile_definitions(vecu_unit_tests PRIVATE
   VECU_DBC_PATH="${PROJECT_SOURCE_DIR}/config/vehicle_can.dbc")
