@@ -1,0 +1,17 @@
+{
+  "name": "fault_management",
+  "description": "signal faults (speed spike, stale sender) with re-engagement; ECU-side injections run in parallel",
+  "duration_s": 33,
+  "initial": {"speed_kph": 80, "accelerator_pct": "hold", "main_switch": true, "set_speed_kph": 80},
+  "events": [
+    {"t": 1.0, "set": true},
+    {"t": 1.3, "accelerator_pct": 0},
+    {"t": 4.0, "fault": "speed_spike", "duration_s": 0.2, "note": "+30 km/h jump: gradient plausibility"},
+    {"t": 6.0, "set": true, "note": "re-engage"},
+    {"t": 9.0, "fault": "freeze_alive", "duration_s": 0.3, "note": "alive counter frozen: stale sensor"},
+    {"t": 11.0, "set": true},
+    {"t": 17.5, "set": true, "note": "after the ECU-side task overrun (deadline misses)"},
+    {"t": 23.0, "set": true, "note": "after the watchdog recovery"},
+    {"t": 30.0, "set": true, "note": "after the UDS hard reset that clears the latched controller fault"}
+  ]
+}
