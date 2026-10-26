@@ -1,0 +1,146 @@
+# Continuous integration: the same stages as scripts/run_regression.sh.
+#
+#   build-test       GCC -Werror / ASan + UBSan / Clang TSan: build + all tests (UDP software CAN bus)
+#   static-analysis  cppcheck + clang-tidy
+#   socketcan        tries to load the vcan kernel module and runs the SocketCAN tests; these
+#                    cannot run on WSL2 (no vcan), so the job is informational (continue-on-error)
+#   performance      manual trigger only: runs scripts/run_performance.py and uploads the report
+#
+# Timing-related system tests run on shared, virtualised runners; their limits have margins,
+# but a heavily loaded runner can still make one fail. The JUnit report and the test log are
+# uploaded for every run.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 11 (-Werror)
+            id: gcc
+            cxx: g++
+            build_type: RelWithDebInfo
+            options: ""
+          - name: ASan + UBSan
+            id: asan
+            cxx: g++
+            build_type: Debug
+            options: -DVECU_ENABLE_SANITIZERS=ON
+          - name: ThreadSanitizer (Clang 14)
+            id: tsan
+            cxx: clang++-14
+            build_type: Debug
+            options: -DVECU_ENABLE_TSAN=ON
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++ clang-14 libgtest-dev python3 python3-pytest
+
+      - name: Sanitizer-friendly address-space randomisation
+        if: matrix.id != 'gcc'
+        # Sanitizer runtimes of this toolchain generation fail with the 32-bit mmap ASLR of
+        # newer kernels; the TSan tests additionally run with ASLR disabled (CMake launcher).
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Configure
+        run: >
+          CXX=${{ matrix.cxx }} cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DVECU_WARNINGS_AS_ERRORS=ON ${{ matrix.options }}
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test
+        run: >
+          ctest --test-dir build -j"$(nproc)" --output-on-failure
+          --output-junit "${{ github.workspace }}/junit-${{ matrix.id }}.xml"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.id }}
+          path: |
+            junit-${{ matrix.id }}.xml
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+
+  static-analysis:
+    name: Static analysis (cppcheck, clang-tidy)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++ libgtest-dev cppcheck clang-tidy
+      - name: Configure (compile_commands.json)
+        run: cmake -S . -B build -DVECU_WARNINGS_AS_ERRORS=ON
+      - name: cppcheck + clang-tidy
+        run: ./scripts/run_static_analysis.sh build
+
+  socketcan:
+    name: SocketCAN on vcan (informational)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++ libgtest-dev python3 python3-pytest can-utils
+          sudo apt-get install -y --no-install-recommends "linux-modules-extra-$(uname -r)" || true
+      - name: Create vcan0
+        run: sudo ./scripts/setup_vcan.sh vcan0
+      - name: Build
+        run: |
+          cmake -S . -B build -DVECU_WARNINGS_AS_ERRORS=ON
+          cmake --build build -j"$(nproc)"
+      - name: SocketCAN tests
+        run: ctest --test-dir build --output-on-failure -R "SocketCan|system_two_ecu_communication"
+
+  performance:
+    name: Performance report
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++ libgtest-dev python3
+      - name: Build
+        run: |
+          cmake -S . -B build -DVECU_BUILD_TESTS=OFF
+          cmake --build build -j"$(nproc)"
+      - name: Measure
+        run: ./scripts/run_performance.py --report performance_report.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: |
+            performance_report.md
+            logs/performance/results.json

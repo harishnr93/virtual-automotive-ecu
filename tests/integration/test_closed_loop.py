@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import time
+import warnings
 
 import pytest
 
@@ -26,7 +27,19 @@ pytestmark = pytest.mark.skipif(not ECU.exists(), reason=f"{ECU} not built")
 
 @pytest.fixture(scope="module")
 def runs(tmp_path_factory):
-    out = tmp_path_factory.mktemp("closed_loop")
+    """Runs all scenarios. A host stall that makes a simulator miss its 10 ms pace invalidates
+    the measurement (not the ECU): then the whole run is repeated exactly once, and every
+    assertion applies unchanged to the repeated run. WSL2 showed occasional whole-host stalls
+    of 10-18 ms (all four simulators late at the same instant), also with nothing else running."""
+    results = run_scenarios(tmp_path_factory.mktemp("closed_loop"))
+    stalled = {name: r["kpi"]["simulator"] for name, r in results.items() if r["kpi"]["simulator"]["late_steps"]}
+    if stalled:
+        warnings.warn(f"closed loop: host stall during the run, repeated once: {stalled}")
+        results = run_scenarios(tmp_path_factory.mktemp("closed_loop_retry"))
+    return results
+
+
+def run_scenarios(out):
     env = {**os.environ, "PYTHONPATH": str(REPO / "simulator")}
     ports = random.sample(range(40000, 60000), len(SCENARIOS))
     started = []
@@ -75,6 +88,7 @@ def test_communication_is_healthy(runs, name):
     sim = runs[name]["kpi"]["simulator"]
     # A stalled simulator invalidates the closed-loop measurement; late_at_s shows when the
     # host stalled (a single 164 ms WSL stall was observed once, see docs/phase4_diagnostics.md).
+    # The fixture already repeated the run once if this happened (documented retry).
     assert sim["late_steps"] == 0, f"simulator missed its 10 ms pace (host stall): {sim}"
     misses = [int(m) for m in re.findall(r"SCHED_SUMMARY task=\S+ .*? deadline_misses=(\d+)", log)]
     assert len(misses) == 4 and sum(misses) <= 2, log  # Control, Dcm, Com, Diag

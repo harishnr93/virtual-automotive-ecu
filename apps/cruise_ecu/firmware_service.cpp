@@ -66,6 +66,7 @@ fw::BootResult FirmwareService::boot() {
   const std::lock_guard<std::mutex> lock(mutex_);
   const core::TimePoint start = core::now();
   running_ = bootloader_->boot(&factory_image_);
+  boot_time_ = core::now();
   timings_.last_boot_ms = elapsedMs(start);
   trial_ = running_.application_valid && (running_.record.state[running_.slot] == fw::SlotState::Trial);
   if (running_.application_valid) {
@@ -95,9 +96,10 @@ fw::BootResult FirmwareService::boot() {
   return running_;
 }
 
-bool FirmwareService::confirmTrial() {
+bool FirmwareService::confirmTrialIfHealthy(core::TimePoint healthy_since, core::TimePoint now,
+                                            std::chrono::duration<double> confirm_after) {
   const std::lock_guard<std::mutex> lock(mutex_);
-  if (!trial_) {
+  if (!trial_ || ((now - std::max(boot_time_, healthy_since)) < confirm_after)) {
     return false;
   }
   const fw::FlashStatus status = bootloader_->confirmActive();

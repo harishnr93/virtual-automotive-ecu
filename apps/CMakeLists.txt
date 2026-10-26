@@ -22,3 +22,6 @@ target_link_libraries(vecu_cruise_ecu PRIVATE vecu_app_common vecu_control vecu_
 
 add_executable(vecu_sched_bench sched_bench/main.cpp)
 target_link_libraries(vecu_sched_bench PRIVATE vecu_app_common vecu_compile_options)
+
+add_executable(vecu_can_latency can_latency/main.cpp)
+target_link_libraries(vecu_can_latency PRIVATE vecu_can Threads::Threads vecu_compile_options)

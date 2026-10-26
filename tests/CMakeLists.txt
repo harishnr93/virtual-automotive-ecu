@@ -62,11 +62,31 @@ if(Python3_FOUND)
       COMMAND ${VECU_TEST_LAUNCHER} ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider ${CMAKE_CURRENT_SOURCE_DIR}/unit/python)
     set_tests_properties(python_unit PROPERTIES LABELS unit)
 
-    add_test(NAME python_integration
-      COMMAND ${VECU_TEST_LAUNCHER} ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider ${CMAKE_CURRENT_SOURCE_DIR}/integration)
-    set_tests_properties(python_integration PROPERTIES
-      LABELS integration
-      ENVIRONMENT "VECU_BIN_DIR=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-      TIMEOUT 300)
+    # System tests: one CTest entry per area, so a regression report names the broken area
+    # (ctest -L firmware, ctest -L system ...). They start real ECU processes and check
+    # real-time behaviour, so each runs alone (RUN_SERIAL): with "ctest -j" a burst of
+    # hundreds of unit-test process starts in parallel once stalled the whole host for ~12 ms
+    # and made the closed-loop pace check fail.
+    set(VECU_SYSTEM_TESTS
+      "test_two_ecu_communication\;can"
+      "test_can_latency\;can\;performance"
+      "test_scheduler_bench\;scheduler\;performance"
+      "test_closed_loop\;control"
+      "test_diagnostics\;diagnostics"
+      "test_fault_management\;faults\;watchdog"
+      "test_firmware_update\;firmware")
+    foreach(entry IN LISTS VECU_SYSTEM_TESTS)
+      list(GET entry 0 file)
+      list(REMOVE_AT entry 0)
+      string(REPLACE "test_" "system_" name ${file})
+      add_test(NAME ${name}
+        COMMAND ${VECU_TEST_LAUNCHER} ${Python3_EXECUTABLE} -m pytest -q -p no:cacheprovider
+                ${CMAKE_CURRENT_SOURCE_DIR}/integration/${file}.py)
+      set_tests_properties(${name} PROPERTIES
+        LABELS "integration;system;${entry}"
+        ENVIRONMENT "VECU_BIN_DIR=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        RUN_SERIAL TRUE
+        TIMEOUT 240)
+    endforeach()
   endif()
 endif()

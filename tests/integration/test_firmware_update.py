@@ -117,6 +117,8 @@ def test_update_trial_confirmation_and_persistence(env):
                 break
             time.sleep(0.1)
         assert confirmed_at is not None, "trial image was not confirmed"
+        # Never before the healthy period (a race once confirmed a trial image right after the reset).
+        assert confirmed_at >= 1.0, f"confirmed only {confirmed_at:.2f} s after the reset"
         print(f"\n[firmware] {len(new)} B image: erase {timing['erase_s'] * 1000:.1f} ms, download "
               f"{timing['download_s']:.2f} s ({timing['throughput_kib_s']:.1f} KiB/s), check "
               f"{timing['check_s'] * 1000:.1f} ms, total {timing['total_s']:.2f} s; confirmed "

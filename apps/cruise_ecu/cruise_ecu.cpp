@@ -622,23 +622,19 @@ void CruiseEcu::bootFirmware(core::TimePoint now) {
       (result.event == firmware::BootEvent::NoValidImage)) {
     (void)faults_.report(kFaultFirmware, true, now);
   }
-  boot_generation_.fetch_add(1U);
   reset_control_ = true;  // the Control task picks up the image's properties
 }
 
 void CruiseEcu::superviseTrialImage(core::TimePoint now) {
-  // A trial image is confirmed after a continuous healthy period: no watchdog safe state.
-  // (Any reset before that, including a watchdog exit, counts as a failed boot attempt.)
-  const std::uint32_t generation = boot_generation_.load();
-  if ((generation != seen_boot_generation_) || safe_state_.load()) {
-    seen_boot_generation_ = generation;
-    healthy_since_ = now;
+  // A trial image is confirmed after a continuous healthy period since its boot: no watchdog
+  // safe state. (Any reset before that, including a watchdog exit, counts as a failed boot
+  // attempt.) The boot time is owned by FirmwareService, see confirmTrialIfHealthy().
+  if (safe_state_.load()) {
+    unhealthy_at_ = now;
     return;
   }
-  const auto healthy_for = std::chrono::duration<double>(now - healthy_since_).count();
-  if ((healthy_for >= platform_.options().confirm_after_s) && firmware_.trialActive()) {
-    (void)firmware_.confirmTrial();
-  }
+  (void)firmware_.confirmTrialIfHealthy(unhealthy_at_, now,
+                                        std::chrono::duration<double>(platform_.options().confirm_after_s));
 }
 
 std::optional<diag::Nrc> CruiseEcu::checkSessionChange(diag::Session requested) const {

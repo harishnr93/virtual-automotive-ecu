@@ -187,6 +187,9 @@ A verified image is not trusted yet: it may contain a bug that only shows at run
 - If the application runs healthily for `--confirm-after` seconds (default 5 s; healthy means no
   watchdog safe state), the Diag task **confirms** it: the slot becomes `Confirmed` and the
   counter is cleared.
+  The healthy period is measured from the boot time recorded by `FirmwareService` under the same
+  lock as the trial state, so it can never start before the boot. A race found in Phase 7 once
+  allowed exactly that ([Phase 7, 7.4](phase7_validation.md#74-problems-found-during-this-phase)).
 - If the ECU resets before confirming (watchdog, crash, power loss), the next boot increments
   the counter. When the count exceeds `max_boot_attempts = 3`, the image is marked `Invalid` and
   the bootloader **rolls back** to the other, confirmed slot. It reports `U3000-96` (fault

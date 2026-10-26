@@ -23,6 +23,7 @@
 // (reset -> boot) and initialisation; one mutex serialises all flash access.
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -64,8 +65,11 @@ class FirmwareService final : public diag::IDownloadHandler {
   /// Runs the bootloader: at power-on and on every hard/watchdog reset.
   firmware::BootResult boot();
 
-  /// Confirms a running trial image (called after a healthy period). True if confirmed now.
-  bool confirmTrial();
+  /// Confirms a running trial image once the ECU has been healthy for `confirm_after` since
+  /// the later of the boot and `healthy_since` (the last moment the ECU was unhealthy).
+  /// The boot time is taken under the same lock as the trial state, so a confirmation can
+  /// never be based on a period that started before the boot. True if confirmed now.
+  bool confirmTrialIfHealthy(core::TimePoint healthy_since, core::TimePoint now, std::chrono::duration<double> confirm_after);
 
   /// Registers DIDs and routines and installs itself as download handler.
   [[nodiscard]] bool registerUds(diag::UdsServer& uds);
@@ -102,6 +106,7 @@ class FirmwareService final : public diag::IDownloadHandler {
   std::optional<firmware::UpdateManager> updater_;
   firmware::BootResult running_{};
   bool trial_{false};
+  core::TimePoint boot_time_{};
   FirmwareTimings timings_{};
   core::TimePoint download_start_{};
 };

@@ -117,7 +117,6 @@ class CruiseEcu {  // NOLINT(clang-analyzer-optin.performance.Padding)
   std::atomic<bool> permanent_safe_state_{false};
   std::atomic<bool> programming_session_{false};  ///< cruise function inhibited while flashing
   std::atomic<bool> bootloader_mode_{false};      ///< no valid image: diagnostics only
-  std::atomic<std::uint32_t> boot_generation_{0U};
 
   // Firmware (thread-safe, see firmware_service.hpp).
   FirmwareService firmware_;
@@ -148,8 +147,7 @@ class CruiseEcu {  // NOLINT(clang-analyzer-optin.performance.Padding)
   // Owned by Diag_100ms.
   std::uint64_t last_total_misses_{0U};
   std::uint32_t last_event_sequence_{0U};
-  std::uint32_t seen_boot_generation_{0U};
-  core::TimePoint healthy_since_{};
+  core::TimePoint unhealthy_at_{};  ///< last Diag cycle in the watchdog safe state
 
   // Counters: written by one task, read by others / at the end.
   std::atomic<std::uint64_t> rx_vehicle_dynamics_{0U};
