@@ -8,7 +8,11 @@
 //   Control_10ms     (prio 80) CruiseController: state machine + PID speed control
 //   Dcm_10ms         (prio 75) diagnostics: ISO-TP + UDS server (requests on 0x7E0/0x7DF)
 //   Com_20ms         (prio 70) RX processing, signal plausibility, supervision, transmits 0x200
-//   Diag_100ms       (prio 50) deadline-miss monitor, fault event log, NVM write, status
+//   Diag_100ms       (prio 50) deadline-miss monitor, fault event log, NVM write, status,
+//                              confirmation of a trial firmware image
+//
+// Firmware (Phase 6): FirmwareService runs the bootloader at start-up and on every hard /
+// watchdog reset and handles the UDS programming services.
 //
 // The control algorithm (src/control) knows nothing about CAN, threads or faults; this class
 // is the glue: bus signals -> CruiseInputs -> CruiseController -> CruiseOutputs -> bus, plus
@@ -18,6 +22,7 @@
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 
 #include "can/alive_counter.hpp"
 #include "can/can_receiver.hpp"
@@ -27,6 +32,7 @@
 #include "control/cruise_controller.hpp"
 #include "core/periodic_scheduler.hpp"
 #include "core/shared_signal.hpp"
+#include "cruise_ecu/firmware_service.hpp"
 #include "diagnostics/isotp.hpp"
 #include "diagnostics/uds_server.hpp"
 #include "faults/dtc_store.hpp"
@@ -68,6 +74,11 @@ class CruiseEcu {  // NOLINT(clang-analyzer-optin.performance.Padding)
   void executeReset(faults::ResetReason reason);
   void registerDids();
 
+  // firmware
+  void bootFirmware(core::TimePoint now);
+  void superviseTrialImage(core::TimePoint now);
+  [[nodiscard]] std::optional<diag::Nrc> checkSessionChange(diag::Session requested) const;
+
   // fault memory persistence
   void loadNvm();
   void saveNvm(faults::ResetReason reason_for_next_start);
@@ -104,6 +115,12 @@ class CruiseEcu {  // NOLINT(clang-analyzer-optin.performance.Padding)
   std::atomic<bool> reset_com_{false};
   std::atomic<std::uint32_t> watchdog_resets_{0U};
   std::atomic<bool> permanent_safe_state_{false};
+  std::atomic<bool> programming_session_{false};  ///< cruise function inhibited while flashing
+  std::atomic<bool> bootloader_mode_{false};      ///< no valid image: diagnostics only
+  std::atomic<std::uint32_t> boot_generation_{0U};
+
+  // Firmware (thread-safe, see firmware_service.hpp).
+  FirmwareService firmware_;
 
   // Owned by Dcm_10ms.
   diag::UdsServer uds_;
@@ -126,10 +143,13 @@ class CruiseEcu {  // NOLINT(clang-analyzer-optin.performance.Padding)
   // Owned by Control_10ms.
   control::CruiseController controller_{};
   control::CruiseState last_state_{control::CruiseState::Off};
+  std::optional<core::TimePoint> defect_hang_at_{};  ///< simulated defect of the running image
 
   // Owned by Diag_100ms.
   std::uint64_t last_total_misses_{0U};
   std::uint32_t last_event_sequence_{0U};
+  std::uint32_t seen_boot_generation_{0U};
+  core::TimePoint healthy_since_{};
 
   // Counters: written by one task, read by others / at the end.
   std::atomic<std::uint64_t> rx_vehicle_dynamics_{0U};

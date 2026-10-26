@@ -39,6 +39,8 @@ struct AppOptions {
   std::string timing_report_path{};  ///< write scheduler timing as JSON
   std::string nvm_path{};            ///< fault memory file (NVM simulation); empty = volatile
   WatchdogAction watchdog_action{WatchdogAction::Reset};
+  std::string flash_path{};          ///< simulated program flash file; empty = RAM (volatile)
+  double confirm_after_s{5.0};       ///< healthy run time before a trial image is confirmed
   std::vector<std::string> injections{};  ///< test-only fault injections (--inject, repeatable)
 };
 

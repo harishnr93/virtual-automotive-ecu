@@ -46,6 +46,7 @@ class FaultInjector {
 
   /// Ends all hangs (called during shutdown).
   void release() noexcept { released_ = true; }
+  [[nodiscard]] bool released() const noexcept { return released_.load(); }
 
   [[nodiscard]] bool empty() const noexcept { return injections_.empty(); }
   [[nodiscard]] const std::vector<Injection>& injections() const noexcept { return injections_; }

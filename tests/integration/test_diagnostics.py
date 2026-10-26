@@ -101,12 +101,12 @@ def test_full_diagnostic_session(system):
     ident = client.read_data_by_identifier(0xF190, 0xF187, 0xF189)
     assert decode_did(0xF190, ident[0xF190]) == "VECUSIM0000000001"
     assert decode_did(0xF187, ident[0xF187]) == "VECU-CC-0001"
-    assert decode_did(0xF189, ident[0xF189]) == "00.05.00"  # software version of Phase 5
+    assert decode_did(0xF189, ident[0xF189]) == "00.06.00"  # version of the booted image (Phase 6)
 
     # --- negative responses and session rules ----------------------------------------------
     expect_nrc(client, [0x22, 0xF1, 0x8C], 0x31)  # serial number: extended session only
     expect_nrc(client, [0x11, 0x03], 0x7E)        # soft reset: extended session only
-    expect_nrc(client, [0x10, 0x02], 0x12)        # programming session: not supported (Phase 6)
+    expect_nrc(client, [0x10, 0x02], 0x7E)        # programming session: only from extended (Phase 6)
     expect_nrc(client, [0x2E, 0xF1, 0x90], 0x11)  # WriteDataByIdentifier: not implemented
     expect_nrc(client, [0x22, 0xF1], 0x13)
 

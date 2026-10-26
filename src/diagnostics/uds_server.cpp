@@ -1,5 +1,6 @@
 #include "diagnostics/uds_server.hpp"
 
+#include <algorithm>
 #include <utility>
 
 namespace vecu::diag {
@@ -11,6 +12,15 @@ constexpr std::uint8_t kDtcFormatIso14229 = 0x01U;  // DTCFormatIdentifier: ISO 
 
 std::uint8_t subFunction(const std::uint8_t* req) noexcept { return static_cast<std::uint8_t>(req[1] & 0x7FU); }
 bool suppressBit(const std::uint8_t* req) noexcept { return (req[1] & kSuppressBit) != 0U; }
+
+/// Big-endian unsigned integer of `bytes` (1..4) bytes.
+std::uint32_t readBe(const std::uint8_t* data, std::size_t bytes) noexcept {
+  std::uint32_t value = 0U;
+  for (std::size_t i = 0U; i < bytes; ++i) {
+    value = (value << 8U) | data[i];
+  }
+  return value;
+}
 
 /// NRCs that are not sent for functionally addressed requests (ISO 14229-1).
 bool suppressedForFunctional(Nrc nrc) noexcept {
@@ -35,8 +45,18 @@ const char* toString(Nrc nrc) noexcept {
       return "responseTooLong";
     case Nrc::ConditionsNotCorrect:
       return "conditionsNotCorrect";
+    case Nrc::RequestSequenceError:
+      return "requestSequenceError";
     case Nrc::RequestOutOfRange:
       return "requestOutOfRange";
+    case Nrc::UploadDownloadNotAccepted:
+      return "uploadDownloadNotAccepted";
+    case Nrc::TransferDataSuspended:
+      return "transferDataSuspended";
+    case Nrc::GeneralProgrammingFailure:
+      return "generalProgrammingFailure";
+    case Nrc::WrongBlockSequenceCounter:
+      return "wrongBlockSequenceCounter";
     case Nrc::SubFunctionNotSupportedInActiveSession:
       return "subFunctionNotSupportedInActiveSession";
     case Nrc::ServiceNotSupportedInActiveSession:
@@ -100,6 +120,20 @@ bool UdsServer::addDid(std::uint16_t id, std::uint16_t length, SessionMask sessi
   return true;
 }
 
+bool UdsServer::addRoutine(std::uint16_t id, SessionMask sessions, RoutineHandler handler) {
+  if ((routine_count_ >= kMaxRoutines) || !handler) {
+    return false;
+  }
+  for (std::size_t i = 0U; i < routine_count_; ++i) {
+    if (routines_[i].id == id) {
+      return false;
+    }
+  }
+  routines_[routine_count_] = RoutineEntry{id, sessions, std::move(handler)};
+  ++routine_count_;
+  return true;
+}
+
 const UdsServer::DidEntry* UdsServer::findDid(std::uint16_t id) const noexcept {
   for (std::size_t i = 0U; i < did_count_; ++i) {
     if (dids_[i].id == id) {
@@ -110,7 +144,43 @@ const UdsServer::DidEntry* UdsServer::findDid(std::uint16_t id) const noexcept {
 }
 
 SessionMask UdsServer::currentSessionMask() const noexcept {
-  return (session_ == Session::Extended) ? kSessionExtended : kSessionDefault;
+  switch (session_) {
+    case Session::Programming:
+      return kSessionProgramming;
+    case Session::Extended:
+      return kSessionExtended;
+    case Session::Default:
+      break;
+  }
+  return kSessionDefault;
+}
+
+bool UdsServer::serviceAllowedInSession(std::uint8_t service) const noexcept {
+  switch (service) {
+    case sid::kClearDiagnosticInformation:
+    case sid::kReadDtcInformation:
+      return session_ != Session::Programming;  // fault memory is not touched while flashing
+    case sid::kRequestDownload:
+    case sid::kTransferData:
+    case sid::kRequestTransferExit:
+      return session_ == Session::Programming;
+    default:
+      return true;
+  }
+}
+
+void UdsServer::changeSession(Session next) {
+  const Session previous = session_;
+  if ((previous == Session::Programming) && (next != Session::Programming) && download_active_) {
+    download_active_ = false;  // leaving programming abandons an unfinished download
+    if (download_handler_ != nullptr) {
+      download_handler_->abortDownload();
+    }
+  }
+  session_ = next;
+  if ((previous != next) && session_handler_) {
+    session_handler_(previous, next);
+  }
 }
 
 std::optional<ResetType> UdsServer::takePendingReset() noexcept {
@@ -121,7 +191,7 @@ std::optional<ResetType> UdsServer::takePendingReset() noexcept {
 
 void UdsServer::poll(core::TimePoint now) {
   if ((session_ != Session::Default) && ((now - last_request_) > config_.s3_server)) {
-    session_ = Session::Default;  // S3 timeout: tester gone
+    changeSession(Session::Default);  // S3 timeout: tester gone
     ++stats_.session_timeouts;
   }
 }
@@ -139,7 +209,17 @@ std::size_t UdsServer::handleRequest(const std::uint8_t* request, std::size_t le
   (void)rsp.put(static_cast<std::uint8_t>(service + sid::kPositiveResponseOffset));
 
   Outcome outcome;
-  switch (service) {
+  const bool known = (service == sid::kDiagnosticSessionControl) || (service == sid::kEcuReset) ||
+                     (service == sid::kClearDiagnosticInformation) || (service == sid::kReadDtcInformation) ||
+                     (service == sid::kReadDataByIdentifier) || (service == sid::kRoutineControl) ||
+                     (service == sid::kRequestDownload) || (service == sid::kTransferData) ||
+                     (service == sid::kRequestTransferExit) || (service == sid::kTesterPresent);
+  if (!known) {
+    outcome.nrc = Nrc::ServiceNotSupported;
+  } else if (!serviceAllowedInSession(service)) {
+    outcome.nrc = Nrc::ServiceNotSupportedInActiveSession;
+  }
+  switch (outcome.nrc ? 0x00U : service) {
     case sid::kDiagnosticSessionControl:
       outcome = sessionControl(request, length, rsp);
       break;
@@ -155,12 +235,23 @@ std::size_t UdsServer::handleRequest(const std::uint8_t* request, std::size_t le
     case sid::kReadDataByIdentifier:
       outcome = readDataByIdentifier(request, length, rsp);
       break;
+    case sid::kRoutineControl:
+      outcome = routineControl(request, length, rsp);
+      break;
+    case sid::kRequestDownload:
+      outcome = requestDownload(request, length, rsp);
+      break;
+    case sid::kTransferData:
+      outcome = transferData(request, length, rsp);
+      break;
+    case sid::kRequestTransferExit:
+      outcome = requestTransferExit(length);
+      break;
     case sid::kTesterPresent:
       outcome = testerPresent(request, length, rsp);
       break;
     default:
-      outcome.nrc = Nrc::ServiceNotSupported;
-      break;
+      break;  // NRC already decided above
   }
   if (!outcome.nrc && rsp.overflow()) {
     outcome.nrc = Nrc::ResponseTooLong;
@@ -195,11 +286,28 @@ UdsServer::Outcome UdsServer::sessionControl(const std::uint8_t* req, std::size_
   }
   const std::uint8_t requested = subFunction(req);
   if ((requested != static_cast<std::uint8_t>(Session::Default)) &&
+      (requested != static_cast<std::uint8_t>(Session::Programming)) &&
       (requested != static_cast<std::uint8_t>(Session::Extended))) {
-    outcome.nrc = Nrc::SubFunctionNotSupported;  // programming session: Phase 6
+    outcome.nrc = Nrc::SubFunctionNotSupported;
     return outcome;
   }
-  session_ = static_cast<Session>(requested);
+  const auto next = static_cast<Session>(requested);
+  // Allowed transitions: anything -> default; default/extended -> extended;
+  // extended/programming -> programming. Programming is left via default or a reset.
+  const bool allowed = (next == Session::Default) ||
+                       ((next == Session::Extended) && (session_ != Session::Programming)) ||
+                       ((next == Session::Programming) && (session_ != Session::Default));
+  if (!allowed) {
+    outcome.nrc = Nrc::SubFunctionNotSupportedInActiveSession;
+    return outcome;
+  }
+  if (session_guard_ && (next != session_)) {
+    if (const std::optional<Nrc> refused = session_guard_(next)) {
+      outcome.nrc = refused;
+      return outcome;
+    }
+  }
+  changeSession(next);
   outcome.suppress_positive = suppressBit(req);
   (void)rsp.put(requested);
   (void)rsp.put16(static_cast<std::uint16_t>(config_.p2_server.count()));
@@ -228,7 +336,7 @@ UdsServer::Outcome UdsServer::ecuReset(const std::uint8_t* req, std::size_t len,
     outcome.nrc = Nrc::SubFunctionNotSupported;
     return outcome;
   }
-  session_ = Session::Default;  // every reset returns to the default session
+  changeSession(Session::Default);  // every reset returns to the default session
   outcome.suppress_positive = suppressBit(req);
   (void)rsp.put(type);
   return outcome;
@@ -323,6 +431,128 @@ UdsServer::Outcome UdsServer::readDataByIdentifier(const std::uint8_t* req, std:
     outcome.nrc = Nrc::RequestOutOfRange;
   }
   return outcome;
+}
+
+// --------------------------------------------------------- 0x31 Routine control ----
+
+UdsServer::Outcome UdsServer::routineControl(const std::uint8_t* req, std::size_t len, Response& rsp) {
+  constexpr std::uint8_t kStartRoutine = 0x01U;
+  Outcome outcome;
+  if (len < 4U) {
+    outcome.nrc = Nrc::IncorrectMessageLengthOrInvalidFormat;
+    return outcome;
+  }
+  if (subFunction(req) != kStartRoutine) {
+    outcome.nrc = Nrc::SubFunctionNotSupported;  // stopRoutine / requestRoutineResults: not implemented
+    return outcome;
+  }
+  const auto id = static_cast<std::uint16_t>((static_cast<unsigned int>(req[2]) << 8U) | req[3]);
+  const RoutineEntry* routine = nullptr;
+  for (std::size_t i = 0U; i < routine_count_; ++i) {
+    if (routines_[i].id == id) {
+      routine = &routines_[i];
+    }
+  }
+  if ((routine == nullptr) || ((routine->sessions & currentSessionMask()) == 0U)) {
+    outcome.nrc = Nrc::RequestOutOfRange;
+    return outcome;
+  }
+  std::array<std::uint8_t, kMaxRoutineStatus> status{};
+  const RoutineResult result = routine->handler(req + 4U, len - 4U, status.data());
+  if (result.nrc) {
+    outcome.nrc = result.nrc;
+    return outcome;
+  }
+  outcome.suppress_positive = suppressBit(req);
+  (void)rsp.put(kStartRoutine);
+  (void)rsp.put16(id);
+  for (std::size_t i = 0U; i < std::min(result.status_length, status.size()); ++i) {
+    (void)rsp.put(status[i]);
+  }
+  return outcome;
+}
+
+// -------------------------------------------------------- 0x34 Request download ----
+
+UdsServer::Outcome UdsServer::requestDownload(const std::uint8_t* req, std::size_t len, Response& rsp) {
+  constexpr std::uint8_t kLengthFormatIdentifier = 0x20U;  // maxNumberOfBlockLength in 2 bytes
+  Outcome outcome;
+  if (len < 3U) {
+    outcome.nrc = Nrc::IncorrectMessageLengthOrInvalidFormat;
+    return outcome;
+  }
+  const std::size_t size_bytes = (req[2] >> 4U) & 0x0FU;
+  const std::size_t address_bytes = req[2] & 0x0FU;
+  if ((size_bytes < 1U) || (size_bytes > 4U) || (address_bytes < 1U) || (address_bytes > 4U)) {
+    outcome.nrc = Nrc::RequestOutOfRange;
+    return outcome;
+  }
+  if (len != 3U + address_bytes + size_bytes) {
+    outcome.nrc = Nrc::IncorrectMessageLengthOrInvalidFormat;
+    return outcome;
+  }
+  if (req[1] != 0x00U) {
+    outcome.nrc = Nrc::RequestOutOfRange;  // no compression / encryption supported
+    return outcome;
+  }
+  if (download_handler_ == nullptr) {
+    outcome.nrc = Nrc::UploadDownloadNotAccepted;
+    return outcome;
+  }
+  if (download_active_) {
+    outcome.nrc = Nrc::ConditionsNotCorrect;  // a download is already in progress
+    return outcome;
+  }
+  const std::uint32_t address = readBe(req + 3U, address_bytes);
+  const std::uint32_t size = readBe(req + 3U + address_bytes, size_bytes);
+  if (const std::optional<Nrc> refused = download_handler_->requestDownload(address, size)) {
+    outcome.nrc = refused;
+    return outcome;
+  }
+  download_active_ = true;
+  (void)rsp.put(kLengthFormatIdentifier);
+  (void)rsp.put16(kMaxBlockLength);
+  return outcome;
+}
+
+// ----------------------------------------------------------- 0x36 Transfer data ----
+
+UdsServer::Outcome UdsServer::transferData(const std::uint8_t* req, std::size_t len, Response& rsp) {
+  Outcome outcome;
+  if ((len < 3U) || (len > kMaxBlockLength)) {
+    outcome.nrc = Nrc::IncorrectMessageLengthOrInvalidFormat;
+    return outcome;
+  }
+  if (!download_active_ || (download_handler_ == nullptr)) {
+    outcome.nrc = Nrc::RequestSequenceError;
+    return outcome;
+  }
+  if (const std::optional<Nrc> refused = download_handler_->transferData(req[1], req + 2U, len - 2U)) {
+    outcome.nrc = refused;
+    return outcome;
+  }
+  (void)rsp.put(req[1]);
+  return outcome;
+}
+
+// --------------------------------------------------- 0x37 Request transfer exit ----
+
+UdsServer::Outcome UdsServer::requestTransferExit(std::size_t len) {
+  Outcome outcome;
+  if (len != 1U) {
+    outcome.nrc = Nrc::IncorrectMessageLengthOrInvalidFormat;  // no transferRequestParameterRecord
+    return outcome;
+  }
+  if (!download_active_ || (download_handler_ == nullptr)) {
+    outcome.nrc = Nrc::RequestSequenceError;
+    return outcome;
+  }
+  if (const std::optional<Nrc> refused = download_handler_->requestTransferExit()) {
+    outcome.nrc = refused;
+    return outcome;
+  }
+  download_active_ = false;
+  return outcome;  // positive response: 0x77 only
 }
 
 // ----------------------------------------------------------- 0x3E Tester present ----

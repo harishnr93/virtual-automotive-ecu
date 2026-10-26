@@ -12,6 +12,7 @@
 // | ControllerFault     | controller output (Control_10ms)  | immediate               | next operation cycle   | yes     | yes      |
 // | WatchdogExpired     | software watchdog thread          | immediate               | next operation cycle   | yes     | yes      |
 // | NvmCorrupted        | NVM load at start-up              | immediate               | next operation cycle   | yes     | no       |
+// | FirmwareRollback    | bootloader result (boot / reset)  | immediate               | next operation cycle   | yes     | no       |
 //
 // Signal-level reactions (discard a bad value, sender-invalid speed) happen immediately in the
 // COM task; the table above governs DTCs, function inhibition and recovery.
@@ -36,7 +37,8 @@ enum : FaultId {
   kFaultController = 5U,
   kFaultWatchdog = 6U,
   kFaultNvm = 7U,
-  kFaultCount = 8U
+  kFaultFirmware = 8U,
+  kFaultCount = 9U
 };
 
 // DTCs: SAE J2012 code + failure type byte (FTB).
@@ -48,6 +50,7 @@ inline constexpr faults::DtcCode kDtcDeadlineMiss = 0xF00048U;         // U3000-
 inline constexpr faults::DtcCode kDtcControllerInternal = 0xF00049U;   // U3000-49 internal electronic failure
 inline constexpr faults::DtcCode kDtcWatchdog = 0xF00047U;             // U3000-47 watchdog / safety failure
 inline constexpr faults::DtcCode kDtcNvm = 0xF00044U;                  // U3000-44 data memory failure
+inline constexpr faults::DtcCode kDtcFirmware = 0xF00096U;             // U3000-96 component internal failure
 
 struct FaultDefinition {
   FaultId id{0U};
@@ -68,6 +71,10 @@ inline constexpr std::array<FaultDefinition, kFaultCount> kFaultTable{{
     {kFaultWatchdog, {"WatchdogExpired", kDtcWatchdog, DebounceConfig::time(milliseconds{0}, milliseconds{0}), true,
                       true}},
     {kFaultNvm, {"NvmCorrupted", kDtcNvm, DebounceConfig::time(milliseconds{0}, milliseconds{0}), true, false}},
+    // Reported when the bootloader rejected an image (trial never confirmed -> rollback, or
+    // corrupt image -> fallback). The ECU runs the previous image normally: no inhibition.
+    {kFaultFirmware, {"FirmwareRollback", kDtcFirmware, DebounceConfig::time(milliseconds{0}, milliseconds{0}), true,
+                      false}},
 }};
 
 /// Physical plausibility limit for the speed signal: no car changes speed by more than

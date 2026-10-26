@@ -80,3 +80,18 @@ target_include_directories(vecu_watchdog PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(vecu_watchdog
   PUBLIC vecu_core
   PRIVATE vecu_compile_options)
+
+# ---------------------------------------------------------------------------
+# vecu_firmware: image format (CRC32), simulated NOR flash, redundant boot record,
+# bootloader logic (trial boot, rollback) and the update state machine.
+# ---------------------------------------------------------------------------
+add_library(vecu_firmware STATIC
+  firmware/firmware_image.cpp
+  firmware/flash_memory.cpp
+  firmware/boot_control.cpp
+  firmware/bootloader.cpp
+  firmware/update_manager.cpp)
+target_include_directories(vecu_firmware PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(vecu_firmware
+  PUBLIC vecu_core
+  PRIVATE vecu_compile_options)

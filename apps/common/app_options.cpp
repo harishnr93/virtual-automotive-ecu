@@ -92,6 +92,10 @@ ParseOutcome parseOptions(int argc, const char* const* argv, AppOptions& options
       options.can_log_path = std::string{value};
     } else if (arg == "--nvm") {
       options.nvm_path = std::string{value};
+    } else if (arg == "--flash") {
+      options.flash_path = std::string{value};
+    } else if (arg == "--confirm-after") {
+      ok = parseDouble(value, options.confirm_after_s) && (options.confirm_after_s >= 0.0);
     } else if (arg == "--watchdog-action") {
       if (value == "reset") {
         options.watchdog_action = WatchdogAction::Reset;
@@ -136,6 +140,8 @@ void printUsage(std::string_view program, std::string_view description) {
       "  --timing-report FILE      write scheduler timing statistics as JSON\n"
       "  --nvm FILE                persistent fault memory (NVM simulation)\n"
       "  --watchdog-action A       reset (default) | exit (code 75, external restart) | none\n"
+      "  --flash FILE              cruise ECU: simulated program flash (A/B slots); default: RAM\n"
+      "  --confirm-after SECONDS   cruise ECU: healthy time before a new image is confirmed (5)\n"
       "  --inject SPEC             TEST ONLY fault injection (repeatable):\n"
       "                              stall:TASK:AT_S:DURATION_S    task blocks once\n"
       "                              overrun:TASK:AT_S:DURATION_S:EXTRA_MS  extra run time\n"

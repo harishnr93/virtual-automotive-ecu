@@ -12,10 +12,13 @@ Each positional argument is one command; commands run in order on one connection
     ./scripts/uds_tester.py "raw 22 F1 90" "raw 3E 00"
     ./scripts/uds_tester.py "functional 3E00"
     ./scripts/uds_tester.py "benchmark 200"
+    ./scripts/uds_tester.py fw-status
+    ./scripts/uds_tester.py "flash /tmp/fw_070.bin"          # erase, download, check, hard reset
+    ./scripts/uds_tester.py "session extended" rollback "reset hard"
 
-Commands: info, live, session default|extended, read-did DID..., dtc [MASK], dtc-count MASK,
-dtc-supported, clear-dtc [GROUP], reset hard|soft, tester-present, raw HEX...,
-functional HEX, benchmark N
+Commands: info, live, session default|extended|programming, read-did DID..., dtc [MASK],
+dtc-count MASK, dtc-supported, clear-dtc [GROUP], reset hard|soft, tester-present, raw HEX...,
+functional HEX, benchmark N, fw-status, flash FILE [--no-reset], rollback
 """
 
 import argparse
@@ -28,10 +31,10 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "simulator"
 from vecu_sim.can_bus import open_bus  # noqa: E402
 from vecu_sim.isotp import IsoTpEndpoint, IsoTpError  # noqa: E402
 from vecu_sim.udp_can_bus import DEFAULT_GROUP, DEFAULT_PORT  # noqa: E402
-from vecu_sim.uds_client import (DIDS, DTCS, NRC_NAMES, NegativeResponseError, UdsClient,  # noqa: E402
-                                 decode_did, dtc_to_text, status_to_text)
+from vecu_sim import firmware_image as fw  # noqa: E402
+from vecu_sim.uds_client import (DIDS, DTCS, NRC_NAMES, RID_ROLLBACK, SESSIONS, FirmwareCheckError,  # noqa: E402
+                                 NegativeResponseError, UdsClient, decode_did, dtc_to_text, status_to_text)
 
-SESSIONS = {"default": 0x01, "extended": 0x03}
 RESETS = {"hard": 0x01, "soft": 0x03}
 STATE_NAMES = {0: "Off", 1: "Standby", 2: "Active", 3: "Override", 4: "Fault"}
 
@@ -96,6 +99,30 @@ def run_command(client, isotp, words):
             times.sort()
             print(f"  {label:<22} n={n} min={times[0]:.2f} median={statistics.median(times):.2f} "
                   f"p95={times[int(0.95 * (n - 1))]:.2f} max={times[-1]:.2f} ms")
+    elif cmd == "fw-status":
+        raw = client.read_data_by_identifier(0xF189, 0x0400, 0x0401, 0x0402)
+        print(f"  running version : {raw[0xF189].decode()}")
+        for did, decoder in ((0x0400, fw.decode_boot_status), (0x0401, fw.decode_update_status),
+                             (0x0402, fw.decode_versions)):
+            print(f"  0x{did:04X} {DIDS[did].name:<22} " +
+                  " ".join(f"{k}={v}" for k, v in decoder(raw[did]).items()))
+    elif cmd == "flash":
+        image = pathlib.Path(args[0]).read_bytes()
+        reset = "--no-reset" not in args
+
+        def progress(done, total):
+            print(f"\r  download {done}/{total} B ({100 * done // total} %)", end="", flush=True)
+
+        try:
+            timing = client.flash_image(image, reset=reset, progress=progress)
+        finally:
+            print()
+        print("  " + " ".join(f"{k}={v:.3f}" for k, v in timing.items()))
+        print("  image verified and activated" + (": ECU reset, booting it as a trial image" if reset else
+                                                  " for the next reset"))
+    elif cmd == "rollback":
+        client.routine_control(RID_ROLLBACK)
+        print("  previous image activated for the next reset")
     else:
         raise ValueError(f"unknown command {cmd!r}")
     if client.last_response_time_ms is not None and cmd not in ("benchmark", "functional"):
@@ -125,6 +152,9 @@ def main() -> int:
                 run_command(client, isotp, words)
             except NegativeResponseError as error:
                 print(f"  negative response: 0x{error.nrc:02X} {NRC_NAMES.get(error.nrc, '')}")
+                status = 1
+            except FirmwareCheckError as error:
+                print(f"  {error}")
                 status = 1
             except (TimeoutError, IsoTpError) as error:
                 print(f"  error: {error}")

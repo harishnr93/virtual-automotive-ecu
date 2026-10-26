@@ -11,6 +11,7 @@
 #include "can/vehicle_signals.hpp"
 #include "core/clock.hpp"
 #include "core/logger.hpp"
+#include "core/os_port.hpp"
 #include "cruise_ecu/cruise_faults.hpp"
 #include "diagnostics/diag_config.hpp"
 
@@ -35,6 +36,10 @@ constexpr std::uint8_t kFaultReasonWatchdogSafeState = 7U;  // DBC CruiseFaultRe
 constexpr std::uint8_t kFaultReasonControlOutputStale = 8U;
 // The Control task refreshes its output every 10 ms; older than this means it stopped.
 constexpr milliseconds kMaxOutputAge{40};
+// A test image with the "simulated defect" flag hangs the Control task this long after boot.
+constexpr milliseconds kDefectHangDelay{1000};
+// Programming session only at standstill (the cruise function is inhibited while flashing).
+constexpr double kMaxProgrammingSpeedKph = 1.0;
 
 // The control layer's enums are transmitted unchanged; guarantee they match the DBC.
 static_assert(static_cast<int>(control::CruiseState::Off) == static_cast<int>(vehicle::CruiseState::Off));
@@ -46,7 +51,6 @@ static_assert(static_cast<int>(control::CruiseState::Fault) == static_cast<int>(
 // Identification data (simulated ECU: clearly not a real vehicle/part).
 constexpr std::string_view kVin{"VECUSIM0000000001"};  // 17 characters
 constexpr std::string_view kSparePartNumber{"VECU-CC-0001"};
-constexpr std::string_view kSoftwareVersion{"00.05.00"};
 constexpr std::string_view kSerialNumber{"SIM-000001"};
 static_assert(kVin.size() == 17U, "a VIN has 17 characters");
 
@@ -77,6 +81,16 @@ const char* resetName(faults::ResetReason reason) noexcept {
   return "power-on";
 }
 
+diag::IsoTpConfig isoTpConfig() {
+  diag::IsoTpConfig config{diag::kPhysicalResponseId, diag::kPhysicalRequestId};
+  // Receiver flow control: the diagnostic RX queue holds 128 frames and Dcm_10ms drains it
+  // every 10 ms. Without a block size a tester may send all 585 consecutive frames of a
+  // 4 KiB TransferData at once and overflow the queue; with BS = 32 it waits for our next
+  // flow control frame after every 32 frames (sent when Dcm_10ms has consumed them).
+  config.block_size = 32U;
+  return config;
+}
+
 bool sameRecords(const faults::DtcRecord* a, const faults::DtcRecord* b, std::size_t n) {
   for (std::size_t i = 0U; i < n; ++i) {
     if ((a[i].code != b[i].code) || (a[i].status != b[i].status) || (a[i].occurrence_count != b[i].occurrence_count) ||
@@ -92,8 +106,9 @@ bool sameRecords(const faults::DtcRecord* a, const faults::DtcRecord* b, std::si
 CruiseEcu::CruiseEcu(app::EcuPlatform& platform)
     : platform_(platform),
       log_(platform.log()),
+      firmware_(platform.log()),
       uds_(diag::UdsServerConfig{}, dtcs_),
-      isotp_(diag::IsoTpConfig{diag::kPhysicalResponseId, diag::kPhysicalRequestId},
+      isotp_(isoTpConfig(),
              [this](const can::CanFrame& frame) { return platform_.io().send(frame); }) {
   (void)monitor_.addMessage(vehicle::kVehicleDynamics.id, milliseconds{vehicle::kVehicleDynamics.timeout_ms},
                             kFirstTimeout);
@@ -122,12 +137,25 @@ bool CruiseEcu::initialize() {
   if ((nvm_load_status_ == faults::NvmStatus::Corrupted) || (nvm_load_status_ == faults::NvmStatus::IoError)) {
     (void)faults_.report(kFaultNvm, true, core::now());
   }
+  if (!firmware_.open(platform_.options().flash_path)) {
+    return false;
+  }
+  bootFirmware(core::now());
   if (!platform_.options().nvm_path.empty()) {
     saveNvm(last_reset_reason_.load());
   }
 
   uds_.setClearHandler([this](faults::DtcCode group) { faults_.onDtcCleared(group); });
+  uds_.setSessionGuard([this](diag::Session requested) { return checkSessionChange(requested); });
+  uds_.setSessionChangeHandler([this](diag::Session /*from*/, diag::Session to) {
+    programming_session_ = (to == diag::Session::Programming);
+    log_.info(core::strCat("UDS_SESSION ", diag::toString(to)));
+  });
   registerDids();
+  if (!firmware_.registerUds(uds_)) {
+    log_.error("firmware DID/routine registration failed");
+    return false;
+  }
 
   platform_.setWatchdogHandlers(app::WatchdogHandlers{
       [this](const watchdog::CheckResult& r, const std::string& entity) { onWatchdogExpired(r, entity); },
@@ -167,6 +195,12 @@ void CruiseEcu::logSummary() const {
       " fault_events=", faults_.eventCount(), " nvm_writes=", nvm_writes_.load(),
       " stale_output_frames=", stale_output_frames_.load(),
       " operation_cycles=", operation_cycles_.load()));
+  const FirmwareTimings t = firmware_.timings();
+  log_.info(core::strCat("FW_SUMMARY version=", firmware_.runningVersion().toString(), " trial=",
+                         firmware_.trialActive(), " boot_ms=", app::fixed(t.last_boot_ms, 3), " max_erase_ms=",
+                         app::fixed(t.max_erase_ms, 3), " max_block_ms=", app::fixed(t.max_block_ms, 3),
+                         " max_check_ms=", app::fixed(t.max_check_ms, 3), " last_download_bytes=",
+                         t.last_download_bytes, " last_download_s=", app::fixed(t.last_download_s, 3)));
 }
 
 // ---------------------------------------------------------------- Control_10ms (prio 80) ----
@@ -176,13 +210,27 @@ void CruiseEcu::taskControl(const sched::ActivationInfo& activation) {
   if (reset_control_.exchange(false)) {
     controller_ = control::CruiseController{};  // simulated reset: application state re-initialised
     last_state_ = control::CruiseState::Off;
+    defect_hang_at_.reset();
+    if (firmware_.defectFlag()) {
+      defect_hang_at_ = now + kDefectHangDelay;
+    }
+  }
+  if (defect_hang_at_ && (now >= *defect_hang_at_)) {
+    // Simulated defect of the running firmware image (test images only): a deadlock.
+    log_.error("FW_DEFECT simulated firmware defect: Control task hangs");
+    defect_hang_at_.reset();
+    while (!platform_.injector().released()) {
+      os::sleepUntil(core::now() + milliseconds{10});
+    }
+    return;
   }
   const auto sample = inputs_.read();
   control::CruiseInputs inputs = sample.value;
   // Stale-data protection: the COM task must refresh the inputs every 20 ms.
   inputs.inputs_stale = (sample.sequence != 0U) && ((now - sample.timestamp) > kMaxInputAge);
   // Function inhibition by qualified faults (FiM) or by the watchdog safe state.
-  inputs.function_inhibited = faults_.functionInhibited() || safe_state_.load();
+  inputs.function_inhibited = faults_.functionInhibited() || safe_state_.load() || programming_session_.load() ||
+                              bootloader_mode_.load();
 
   double dt = kControlPeriodS;
   if (platform_.injector().takeControllerNan(platform_.secondsSinceEpoch(activation.release))) {
@@ -454,6 +502,7 @@ void CruiseEcu::executeReset(faults::ResetReason reason) {
     // Hard reset / watchdog reset = power cycle = new operation cycle (releases latched faults).
     operation_cycles_.fetch_add(1U);
     faults_.startOperationCycle();
+    bootFirmware(core::now());  // a hard reset passes through the bootloader
   }
   reset_control_ = true;
   reset_com_ = true;
@@ -466,7 +515,10 @@ void CruiseEcu::registerDids() {
   };
   bool ok = addText(0xF190U, kVin, diag::kSessionAll);
   ok = addText(0xF187U, kSparePartNumber, diag::kSessionAll) && ok;
-  ok = addText(0xF189U, kSoftwareVersion, diag::kSessionAll) && ok;
+  ok = uds_.addDid(0xF189U, 8U, diag::kSessionAll, [this](std::uint8_t* out) {
+    const std::string text = firmware_.runningVersion().toString();  // version of the booted image
+    std::copy_n(text.begin(), std::min<std::size_t>(text.size(), 8U), out);
+  }) && ok;
   ok = addText(0xF18CU, kSerialNumber, diag::kSessionExtended) && ok;
   ok = uds_.addDid(0xF186U, 1U, diag::kSessionAll,
                    [this](std::uint8_t* out) { out[0] = static_cast<std::uint8_t>(uds_.session()); }) && ok;
@@ -529,6 +581,7 @@ void CruiseEcu::taskDiag(const sched::ActivationInfo& activation) {
 
   logFaultEvents();
   saveNvmIfChanged(now);
+  superviseTrialImage(now);
 
   if ((activation.activation > 0U) && ((activation.activation % 10U) == 0U)) {  // every 1 s
     const control::CruiseInputs inputs = inputs_.read().value;
@@ -555,6 +608,51 @@ void CruiseEcu::logFaultEvents() {
                                 faults::toString(e.to), " t=", app::fixed(platform_.secondsSinceEpoch(e.time), 3), "s"));
     }
   }
+}
+
+// -------------------------------------------------------------------------- firmware ----
+
+void CruiseEcu::bootFirmware(core::TimePoint now) {
+  const firmware::BootResult result = firmware_.boot();
+  bootloader_mode_ = !result.application_valid;
+  if (!result.application_valid) {
+    log_.error("BOOTLOADER_MODE no valid application image: cruise function disabled, flashing possible");
+  }
+  if ((result.event == firmware::BootEvent::Rollback) || (result.event == firmware::BootEvent::FallbackCorrupt) ||
+      (result.event == firmware::BootEvent::NoValidImage)) {
+    (void)faults_.report(kFaultFirmware, true, now);
+  }
+  boot_generation_.fetch_add(1U);
+  reset_control_ = true;  // the Control task picks up the image's properties
+}
+
+void CruiseEcu::superviseTrialImage(core::TimePoint now) {
+  // A trial image is confirmed after a continuous healthy period: no watchdog safe state.
+  // (Any reset before that, including a watchdog exit, counts as a failed boot attempt.)
+  const std::uint32_t generation = boot_generation_.load();
+  if ((generation != seen_boot_generation_) || safe_state_.load()) {
+    seen_boot_generation_ = generation;
+    healthy_since_ = now;
+    return;
+  }
+  const auto healthy_for = std::chrono::duration<double>(now - healthy_since_).count();
+  if ((healthy_for >= platform_.options().confirm_after_s) && firmware_.trialActive()) {
+    (void)firmware_.confirmTrial();
+  }
+}
+
+std::optional<diag::Nrc> CruiseEcu::checkSessionChange(diag::Session requested) const {
+  if (requested != diag::Session::Programming) {
+    return std::nullopt;
+  }
+  const double speed = inputs_.read().value.vehicle_speed_kph;
+  const bool cruise_active = output_.read().value.state == control::CruiseState::Active;
+  if ((speed > kMaxProgrammingSpeedKph) || cruise_active) {
+    log_.warning(core::strCat("UDS programming session refused: speed_kph=", app::fixed(speed, 1),
+                              " cruise_active=", cruise_active));
+    return diag::Nrc::ConditionsNotCorrect;
+  }
+  return std::nullopt;
 }
 
 // ------------------------------------------------------------------------------- NVM ----

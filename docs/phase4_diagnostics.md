@@ -57,7 +57,7 @@ why the request failed. Many services have a **sub-function**; setting bit 7 of 
 |---|---|---|---|
 | default (0x01) | power-up, reset, `10 01`, S3 timeout | identification, live data, DTCs, hard reset | — |
 | extended (0x03) | `10 03` | additionally: serial number, scheduler health DID, soft reset | `10 01`, reset, **S3 = 5 s without requests** |
-| programming (0x02) | — | not implemented (planned with firmware update, Phase 6) | — |
+| programming (0x02) | — | not implemented in Phase 4; added in [Phase 6](phase6_firmware_update.md#210-the-uds-programming-sequence) (from extended only) | — |
 
 `3E 00` (**TesterPresent**) keeps a non-default session alive. Any request restarts the S3 timer.
 

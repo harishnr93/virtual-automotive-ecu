@@ -16,8 +16,9 @@ target_link_libraries(vecu_sensor_ecu PRIVATE vecu_app_common vecu_compile_optio
 
 add_executable(vecu_cruise_ecu
   cruise_ecu/main.cpp
-  cruise_ecu/cruise_ecu.cpp)
-target_link_libraries(vecu_cruise_ecu PRIVATE vecu_app_common vecu_control vecu_diagnostics vecu_faults vecu_compile_options)
+  cruise_ecu/cruise_ecu.cpp
+  cruise_ecu/firmware_service.cpp)
+target_link_libraries(vecu_cruise_ecu PRIVATE vecu_app_common vecu_control vecu_diagnostics vecu_faults vecu_firmware vecu_compile_options)
 
 add_executable(vecu_sched_bench sched_bench/main.cpp)
 target_link_libraries(vecu_sched_bench PRIVATE vecu_app_common vecu_compile_options)

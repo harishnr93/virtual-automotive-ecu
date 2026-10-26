@@ -75,7 +75,8 @@ TEST_F(UdsServerTest, SessionControlResponseCarriesTimingParameters) {
 }
 
 TEST_F(UdsServerTest, SessionControlErrors) {
-  EXPECT_EQ(request({0x10U, 0x02U}), nrc(0x10U, Nrc::SubFunctionNotSupported));  // programming: Phase 6
+  // Programming only via the extended session (Phase 6); see test_uds_programming.cpp.
+  EXPECT_EQ(request({0x10U, 0x02U}), nrc(0x10U, Nrc::SubFunctionNotSupportedInActiveSession));
   EXPECT_EQ(request({0x10U, 0x7FU}), nrc(0x10U, Nrc::SubFunctionNotSupported));
   EXPECT_EQ(request({0x10U, 0x03U, 0x00U}), nrc(0x10U, Nrc::IncorrectMessageLengthOrInvalidFormat));
   EXPECT_EQ(server.session(), Session::Default);
