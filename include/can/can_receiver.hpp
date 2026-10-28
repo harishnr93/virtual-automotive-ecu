@@ -27,7 +27,7 @@ namespace vecu::can {
 struct RxFrame {
   CanFrame frame{};
   core::TimePoint rx_time{};      ///< monotonic, used for timeout supervision
-  std::int64_t wall_time_us{0};   ///< wall clock, used for trace files
+  std::int64_t wall_time_us{0};   ///< steady wall clock (core::steadyWallMicros), used for trace files
 };
 
 /// Bounded, thread-safe FIFO between the reception thread and the COM task.

@@ -75,7 +75,6 @@ class FirmwareService final : public diag::IDownloadHandler {
   [[nodiscard]] bool registerUds(diag::UdsServer& uds);
 
   [[nodiscard]] firmware::Version runningVersion() const;
-  [[nodiscard]] bool applicationValid() const;
   [[nodiscard]] bool trialActive() const;
   [[nodiscard]] bool defectFlag() const;
   [[nodiscard]] FirmwareTimings timings() const;

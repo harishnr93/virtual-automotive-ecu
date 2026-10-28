@@ -90,3 +90,10 @@ if(Python3_FOUND)
     endforeach()
   endif()
 endif()
+
+# ---------------------------------------------------------------------------
+# Fuzz targets (Clang libFuzzer, -DVECU_BUILD_FUZZERS=ON): see tests/fuzz/.
+# ---------------------------------------------------------------------------
+if(VECU_BUILD_FUZZERS)
+  add_subdirectory(fuzz)
+endif()

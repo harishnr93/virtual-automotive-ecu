@@ -50,6 +50,7 @@ struct Options {
   long period_us{1000};
   long background_fps{0};
   std::string json_path{};
+  std::string samples_path{};
 };
 
 bool parseLong(const char* text, long& value) {
@@ -73,7 +74,8 @@ void printUsage(const char* program) {
       "  --count N                 probe frames (default: 2000)\n"
       "  --period-us US            probe period in microseconds (default: 1000)\n"
       "  --background-fps N        additional bus traffic from a third channel (default: 0)\n"
-      "  --json FILE               write the results as JSON\n",
+      "  --json FILE               write the results as JSON\n"
+      "  --samples FILE            write every measured latency (us), one per line\n",
       program);
 }
 
@@ -107,6 +109,8 @@ int parseOptions(int argc, char** argv, Options& options) {
       ok = parseLong(value, options.background_fps);
     } else if (arg == "--json") {
       options.json_path = value;
+    } else if (arg == "--samples") {
+      options.samples_path = value;
     } else {
       ok = false;
     }
@@ -292,6 +296,18 @@ int main(int argc, char** argv) {
     file << json.data() << '\n';
     if (!file) {
       (void)std::fprintf(stderr, "cannot write %s\n", options.json_path.c_str());  // NOLINT(cppcoreguidelines-pro-type-vararg)
+      return 1;
+    }
+  }
+  if (!options.samples_path.empty()) {
+    std::ofstream samples(options.samples_path);
+    for (std::size_t i = 0U; i < count; ++i) {
+      if (rx_ns[i] != kNotReceived) {
+        samples << (static_cast<double>(rx_ns[i] - tx_ns[i]) / 1000.0) << '\n';
+      }
+    }
+    if (!samples) {
+      (void)std::fprintf(stderr, "cannot write %s\n", options.samples_path.c_str());  // NOLINT(cppcoreguidelines-pro-type-vararg)
       return 1;
     }
   }

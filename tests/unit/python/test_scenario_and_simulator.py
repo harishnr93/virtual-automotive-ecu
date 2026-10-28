@@ -148,19 +148,20 @@ def test_svg_plot_is_well_formed_and_inside_canvas(tmp_path):
 
     records = synthetic([60 + i * 0.02 for i in range(500)])
     for i, r in enumerate(records):
-        r.update(applied_throttle_pct=20.0, accelerator_pct=0.0, grade_pct=0.0, cruise_state=1 if i < 100 else 2)
+        r.update(applied_throttle_pct=20.0, accelerator_pct=0.0, brake_pct=0.0, grade_pct=0.0,
+                 cruise_state=1 if i < 100 else 2)
     path = tmp_path / "plot.svg"
-    svg_plot.write_run_plot(records, path, title="unit <test>")
+    svg_plot.write_run_plot(records, path, title="unit <test>", events=[{"t": 1.0, "set": True}])
     root = ET.parse(path).getroot()
     width, height = float(root.get("width")), float(root.get("height"))
     lines = [e for e in root.iter() if e.tag.endswith("polyline")]
-    assert len(lines) == 5
+    assert len(lines) == 3  # speed, target, applied throttle (pedals never pressed: not drawn)
     for line in lines:
         for point in line.get("points").split():
             x, y = map(float, point.split(","))
             assert 0 <= x <= width and 0 <= y <= height
-    state_bands = [e for e in root.iter() if e.tag.endswith("rect") and e.get("opacity") == "0.25"]
-    assert len(state_bands) == 2  # Standby, then Active
+    labels = [e.text for e in root.iter() if e.tag.endswith("text")]
+    assert "Standby" in labels and "Active" in labels and "set" in labels
 
 
 def test_speed_spike_adds_impossible_jump():

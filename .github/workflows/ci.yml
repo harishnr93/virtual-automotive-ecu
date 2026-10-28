@@ -2,9 +2,12 @@
 #
 #   build-test       GCC -Werror / ASan + UBSan / Clang TSan: build + all tests (UDP software CAN bus)
 #   static-analysis  cppcheck + clang-tidy
+#   coverage         gcov line/function coverage of the whole test suite (report as artifact)
+#   fuzz             libFuzzer targets for the input parsers, 60 s each (crash inputs as artifact)
 #   socketcan        tries to load the vcan kernel module and runs the SocketCAN tests; these
 #                    cannot run on WSL2 (no vcan), so the job is informational (continue-on-error)
-#   performance      manual trigger only: runs scripts/run_performance.py and uploads the report
+#   performance      manual trigger only: runs scripts/run_performance.py and scripts/make_figures.py
+#                    and uploads the report and the figures
 #
 # Timing-related system tests run on shared, virtualised runners; their limits have margins,
 # but a heavily loaded runner can still make one fail. The JUnit report and the test log are
@@ -100,6 +103,53 @@ jobs:
       - name: cppcheck + clang-tidy
         run: ./scripts/run_static_analysis.sh build
 
+  coverage:
+    name: Coverage (gcov)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++ libgtest-dev python3 python3-pytest
+      - name: Build, run all tests, report
+        run: ./scripts/run_coverage.sh --report coverage_report.md
+      - name: Job summary
+        if: always()
+        run: head -n 30 coverage_report.md >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage_report.md
+          if-no-files-found: ignore
+
+  fuzz:
+    name: Fuzzing (libFuzzer, 60 s per target)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake clang-14 libgtest-dev python3 python3-pytest
+      - name: Sanitizer-friendly address-space randomisation
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+      - name: Build fuzz targets
+        run: |
+          CXX=clang++-14 cmake -S . -B build-fuzz -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVECU_WARNINGS_AS_ERRORS=ON \
+            -DVECU_BUILD_FUZZERS=ON -DVECU_FUZZ_SECONDS=60
+          cmake --build build-fuzz -j"$(nproc)" --target fuzz_isotp fuzz_uds_server fuzz_udp_wire fuzz_firmware fuzz_nvm
+      - name: Fuzz
+        run: ctest --test-dir build-fuzz -L fuzz -j"$(nproc)" --output-on-failure
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-crashes
+          path: build-fuzz/tests/fuzz/crash-*
+
   socketcan:
     name: SocketCAN on vcan (informational)
     runs-on: ubuntu-22.04
@@ -122,7 +172,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure -R "SocketCan|system_two_ecu_communication"
 
   performance:
-    name: Performance report
+    name: Performance report and figures
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
@@ -138,9 +188,12 @@ jobs:
           cmake --build build -j"$(nproc)"
       - name: Measure
         run: ./scripts/run_performance.py --report performance_report.md
+      - name: Figures
+        run: ./scripts/make_figures.py --images figures
       - uses: actions/upload-artifact@v4
         with:
           name: performance-report
           path: |
             performance_report.md
             logs/performance/results.json
+            figures/

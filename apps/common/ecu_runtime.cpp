@@ -12,6 +12,10 @@
 #include "core/os_port.hpp"
 #include "core/timing_report.hpp"
 
+#ifdef VECU_COVERAGE
+extern "C" void __gcov_dump(void);  // NOLINT(bugprone-reserved-identifier): gcov runtime (coverage builds)
+#endif
+
 namespace vecu::app {
 
 namespace {
@@ -33,7 +37,7 @@ bool CanIo::send(const can::CanFrame& frame) {
     return false;
   }
   tx_ok_.fetch_add(1U, std::memory_order_relaxed);
-  trace_.write(frame, core::wallClockMicros());
+  trace_.write(frame, core::steadyWallMicros());
   return true;
 }
 
@@ -190,6 +194,9 @@ void EcuPlatform::emergencyExit(int exit_code) {
     shutdown_hook_(true);
   }
   (void)std::fflush(nullptr);
+#ifdef VECU_COVERAGE
+  __gcov_dump();  // coverage builds only: _Exit skips the atexit handler that writes the counters
+#endif
   std::_Exit(exit_code);
 }
 
@@ -230,6 +237,12 @@ int EcuPlatform::run() {
     return 1;
   }
   watchdog_.activate(scheduler_.epoch());
+  // Wall-clock time of the scheduler epoch: lets tools align the "t=...s" of log events with
+  // other processes (simulator, CAN traces) that record wall-clock time.
+  log_.info(core::strCat("SCHED_EPOCH wall_us=",
+                         core::steadyWallMicros() -
+                             std::chrono::duration_cast<std::chrono::microseconds>(core::now() - scheduler_.epoch())
+                                 .count()));
   os::ThreadConfig watchdog_config;
   watchdog_config.name = "Watchdog";
   watchdog_config.priority = kPriorityWatchdog;

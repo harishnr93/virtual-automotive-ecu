@@ -63,7 +63,7 @@ void CanReceiver::run() {
     const CanStatus status = channel_.receive(entry.frame, kPollInterval);
     if (status == CanStatus::Ok) {
       entry.rx_time = core::now();
-      entry.wall_time_us = core::wallClockMicros();
+      entry.wall_time_us = core::steadyWallMicros();
       received_.fetch_add(1U, std::memory_order_relaxed);
       (void)queueFor(entry.frame.id).push(entry);  // overruns are counted by the queue
     } else if ((status != CanStatus::Timeout) && (status != CanStatus::InvalidFrame)) {

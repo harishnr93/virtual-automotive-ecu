@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="518" viewBox="0 0 960 518" role="img" aria-label="Software watchdog: Control task stalled for 400 ms" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"><title>Software watchdog: Control task stalled for 400 ms</title><style>.grid,.axis{stroke-width:1}.ring{stroke-width:2}text{font-family:system-ui, -apple-system, 'Segoe UI', sans-serif}@media (prefers-color-scheme: dark){.bg{fill:#1a1a19}.t1{fill:#f0efec}.t2{fill:#c3c2b7}.tm{fill:#898781}.grid{stroke:#2c2c2a}.axis{stroke:#383835}.ring{stroke:#1a1a19}.f-s1{fill:#3987e5}.s-s1{stroke:#3987e5}.f-s2{fill:#d95926}.s-s2{stroke:#d95926}.f-s3{fill:#199e70}.s-s3{stroke:#199e70}.f-s4{fill:#c98500}.s-s4{stroke:#c98500}.f-s5{fill:#d55181}.s-s5{stroke:#d55181}.f-s7{fill:#9085e9}.s-s7{stroke:#9085e9}.f-s8{fill:#e66767}.s-s8{stroke:#e66767}.f-surface{fill:#1a1a19}.s-surface{stroke:#1a1a19}.f-text1{fill:#f0efec}.s-text1{stroke:#f0efec}.f-text2{fill:#c3c2b7}.s-text2{stroke:#c3c2b7}.f-grid{fill:#2c2c2a}.s-grid{stroke:#2c2c2a}.f-axis{fill:#383835}.s-axis{stroke:#383835}.f-neutral{fill:#4a4a46}.s-neutral{stroke:#4a4a46}}</style><rect class="bg" fill="#fcfcfb" width="960" height="518" rx="6"/>
+<text class="t1" fill="#0b0b0b" x="20" y="28" font-size="15" font-weight="600">Software watchdog: Control task stalled for 400 ms</text>
+<text class="t2" fill="#52514e" x="20" y="47" font-size="12">Measured 2026-10-28, WSL2, software CAN bus, real-time processes; two independent mechanisms: stale-output check (COM) and watchdog</text>
+<text class="tm" fill="#898781" x="183.0" y="443.0" font-size="10.5" text-anchor="middle">21</text>
+<text class="tm" fill="#898781" x="292.8" y="443.0" font-size="10.5" text-anchor="middle">21.5</text>
+<text class="tm" fill="#898781" x="402.7" y="443.0" font-size="10.5" text-anchor="middle">22</text>
+<text class="tm" fill="#898781" x="512.5" y="443.0" font-size="10.5" text-anchor="middle">22.5</text>
+<text class="tm" fill="#898781" x="622.4" y="443.0" font-size="10.5" text-anchor="middle">23</text>
+<text class="tm" fill="#898781" x="732.3" y="443.0" font-size="10.5" text-anchor="middle">23.5</text>
+<text class="tm" fill="#898781" x="842.1" y="443.0" font-size="10.5" text-anchor="middle">24</text>
+<text class="tm" fill="#898781" x="930.0" y="458.0" font-size="10.5" text-anchor="end">ECU time [s]</text>
+<rect class="f-s1" x="150.0" y="474.0" width="14" height="12" rx="2" fill="#2a78d6"/>
+<text class="t2" fill="#52514e" x="170.0" y="484.0" font-size="11">Standby</text>
+<rect class="f-s3" x="233.0" y="474.0" width="14" height="12" rx="2" fill="#1baf7a"/>
+<text class="t2" fill="#52514e" x="253.0" y="484.0" font-size="11">Active</text>
+<rect class="f-critical" x="309.0" y="474.0" width="14" height="12" rx="2" fill="#d03b3b"/>
+<text class="t2" fill="#52514e" x="329.0" y="484.0" font-size="11">Fault</text>
+<line class="grid" stroke="#e1e0d9" x1="183.0" x2="183.0" y1="100.0" y2="220.0"/>
+<line class="grid" stroke="#e1e0d9" x1="292.8" x2="292.8" y1="100.0" y2="220.0"/>
+<line class="grid" stroke="#e1e0d9" x1="402.7" x2="402.7" y1="100.0" y2="220.0"/>
+<line class="grid" stroke="#e1e0d9" x1="512.5" x2="512.5" y1="100.0" y2="220.0"/>
+<line class="grid" stroke="#e1e0d9" x1="622.4" x2="622.4" y1="100.0" y2="220.0"/>
+<line class="grid" stroke="#e1e0d9" x1="732.3" x2="732.3" y1="100.0" y2="220.0"/>
+<line class="grid" stroke="#e1e0d9" x1="842.1" x2="842.1" y1="100.0" y2="220.0"/>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="220.0" y2="220.0"/>
+<text class="tm" fill="#898781" x="144.0" y="224.0" font-size="11" text-anchor="end">0</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="180.0" y2="180.0"/>
+<text class="tm" fill="#898781" x="144.0" y="184.0" font-size="11" text-anchor="end">20</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="140.0" y2="140.0"/>
+<text class="tm" fill="#898781" x="144.0" y="144.0" font-size="11" text-anchor="end">40</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="100.0" y2="100.0"/>
+<text class="tm" fill="#898781" x="144.0" y="104.0" font-size="11" text-anchor="end">60</text>
+<text class="t2" fill="#52514e" x="150.0" y="92.0" font-size="12">Throttle command on the bus [%]</text>
+<line class="axis" stroke="#c3c2b7" x1="150.0" x2="930.0" y1="220.0" y2="220.0"/>
+<rect class="f-critical" x="183.0" y="100.0" width="87.9" height="120.0" fill="#d03b3b" opacity="0.08"/>
+<polyline class="s-s3" fill="none" stroke="#1baf7a" stroke-width="2.0" stroke-linejoin="round" stroke-linecap="round" points="151.5,207.9 153.7,207.7 155.9,207.7 158.1,207.5 160.3,207.5 162.5,207.5 164.7,207.5 166.9,207.2 169.1,207.2 171.3,207.2 173.5,207.2 175.7,207.0 177.9,207.0 180.1,207.0 182.3,207.0 184.5,206.8 186.7,206.8 188.9,206.8 191.1,206.8 193.3,220.0 195.4,220.0 197.6,220.0 199.8,220.0 202.0,220.0 204.2,220.0 206.4,220.0 208.6,220.0 210.8,220.0 213.0,220.0 215.2,220.0 217.4,220.0 219.6,220.0 221.8,220.0 224.0,220.0 226.2,220.0 228.4,220.0 230.6,220.0 232.8,220.0 235.0,220.0 237.2,220.0 239.4,220.0 241.6,220.0 243.8,220.0 246.0,220.0 248.2,220.0 250.4,220.0 252.6,220.0 254.8,220.0 257.0,220.0 259.2,220.0 261.4,220.0 263.6,220.0 265.8,220.0 268.0,220.0 270.2,220.0 272.4,220.0 274.5,220.0 276.7,220.0 278.9,220.0 281.1,220.0 283.3,220.0 285.5,220.0 287.7,220.0 289.9,220.0 292.1,220.0 294.3,220.0 296.5,220.0 298.7,220.0 300.9,220.0 303.1,220.0 305.3,220.0 307.5,220.0 309.7,220.0 311.9,220.0 314.1,220.0 316.3,220.0 318.5,220.0 320.7,220.0 322.9,220.0 325.1,220.0 327.3,220.0 329.5,220.0 331.7,220.0 333.9,220.0 336.1,220.0 338.3,220.0 340.5,220.0 342.7,220.0 344.9,220.0 347.1,220.0 349.3,220.0 351.4,220.0 353.6,220.0 355.8,220.0 358.0,220.0 360.2,220.0 362.4,220.0 364.6,220.0 366.8,220.0 369.0,220.0 371.2,220.0 373.4,220.0 375.6,220.0 377.8,220.0 380.0,220.0 382.2,220.0 384.4,220.0 386.6,220.0 388.8,220.0 391.0,220.0 393.2,220.0 395.4,220.0 397.6,220.0 399.8,220.0 402.0,220.0 404.2,220.0 406.4,220.0 408.6,220.0 410.8,220.0 413.0,220.0 415.2,220.0 417.4,220.0 419.6,220.0 421.8,220.0 424.0,220.0 426.2,220.0 428.4,220.0 430.5,220.0 432.7,220.0 434.9,220.0 437.1,220.0 439.3,220.0 441.5,220.0 443.7,220.0 445.9,220.0 448.1,220.0 450.3,220.0 452.5,220.0 454.7,220.0 456.9,220.0 459.1,220.0 461.3,220.0 463.5,220.0 465.7,220.0 467.9,220.0 470.1,220.0 472.3,220.0 474.5,220.0 476.7,220.0 478.9,220.0 481.1,220.0 483.3,220.0 485.5,220.0 487.7,220.0 489.9,220.0 492.1,220.0 494.3,220.0 496.5,220.0 498.7,220.0 500.9,220.0 503.1,220.0 505.3,220.0 507.4,220.0 509.6,220.0 511.8,220.0 514.0,220.0 516.2,220.0 518.4,220.0 520.6,220.0 522.8,220.0 525.0,220.0 527.2,220.0 529.4,220.0 531.6,220.0 533.8,220.0 536.0,220.0 538.2,220.0 540.4,220.0 542.6,220.0 544.8,220.0 547.0,220.0 549.2,220.0 551.4,220.0 553.6,220.0 555.8,220.0 558.0,220.0 560.2,220.0 562.4,220.0 564.6,220.0 566.8,220.0 569.0,220.0 571.2,220.0 573.4,220.0 575.6,220.0 577.8,220.0 580.0,220.0 582.2,220.0 584.4,220.0 586.5,220.0 588.7,220.0 590.9,220.0 593.1,220.0 595.3,220.0 597.5,220.0 599.7,220.0 601.9,220.0 604.1,220.0 606.3,220.0 608.5,220.0 610.7,220.0 612.9,220.0 615.1,220.0 617.3,220.0 619.5,220.0 621.7,220.0 623.9,220.0 626.1,220.0 628.3,220.0 630.5,220.0 632.7,220.0 634.9,220.0 637.1,220.0 639.3,220.0 641.5,220.0 643.7,220.0 645.9,220.0 648.1,220.0 650.3,220.0 652.5,220.0 654.7,220.0 656.9,220.0 659.1,220.0 661.3,220.0 663.4,220.0 665.6,220.0 667.8,220.0 670.0,220.0 672.2,220.0 674.4,220.0 676.6,220.0 678.8,220.0 681.0,220.0 683.2,220.0 685.4,220.0 687.6,220.0 689.8,220.0 692.0,220.0 694.2,220.0 696.4,220.0 698.6,220.0 700.8,220.0 703.0,220.0 705.2,220.0 707.4,220.0 709.6,220.0 711.8,220.0 714.0,220.0 716.2,220.0 718.4,220.0 720.6,220.0 722.8,220.0 725.0,220.0 727.2,220.0 729.4,220.0 731.6,220.0 733.8,220.0 736.0,220.0 738.2,220.0 740.4,220.0 742.5,220.0 744.7,220.0 746.9,220.0 749.1,220.0 751.3,153.2 753.5,153.2 755.7,151.6 757.9,151.6 760.1,150.2 762.3,150.2 764.5,148.5 766.7,148.5 768.9,147.1 771.1,147.1 773.3,145.9 775.5,145.9 777.7,144.5 779.9,144.5 782.1,143.2 784.3,143.2 786.5,142.0 788.7,142.0 790.9,141.0 793.1,141.0 795.3,139.7 797.5,139.7 799.7,138.7 801.9,138.7 804.1,137.6 806.3,137.6 808.5,136.6 810.7,136.6 812.9,135.7 815.1,135.7 817.3,134.9 819.4,134.9 821.6,134.0 823.8,134.0 826.0,133.1 828.2,133.1 830.4,132.3 832.6,132.3 834.8,131.6 837.0,131.6 839.2,130.9 841.4,130.9 843.6,130.3 845.8,130.3 848.0,129.6 850.2,129.6 852.4,128.9 854.6,128.9 856.8,128.3 859.0,128.3 861.2,127.8 863.4,127.8 865.6,127.3 867.8,127.3 870.0,126.8 872.2,126.8 874.4,126.4 876.6,126.4 878.8,125.9 881.0,125.9 883.2,125.4 885.4,125.4 887.6,125.1 889.8,125.1 892.0,124.6 894.2,124.6 896.4,124.3 898.5,124.3 900.7,124.1 902.9,124.1 905.1,167.9 907.3,167.9 909.5,190.7 911.7,190.7 913.9,191.6 916.1,191.6 918.3,192.6 920.5,192.6 922.7,193.5 924.9,193.5 927.1,194.4 929.3,194.4"/>
+<text class="t2" fill="#52514e" x="142.0" y="278.0" font-size="11" text-anchor="end">Control_10ms</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="288.0" y2="288.0"/>
+<text class="t2" fill="#52514e" x="142.0" y="306.0" font-size="11" text-anchor="end">Output (COM check)</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="316.0" y2="316.0"/>
+<text class="t2" fill="#52514e" x="142.0" y="334.0" font-size="11" text-anchor="end">Watchdog expired</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="344.0" y2="344.0"/>
+<text class="t2" fill="#52514e" x="142.0" y="362.0" font-size="11" text-anchor="end">Reset</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="372.0" y2="372.0"/>
+<text class="t2" fill="#52514e" x="142.0" y="390.0" font-size="11" text-anchor="end">Safe state left</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="400.0" y2="400.0"/>
+<text class="t2" fill="#52514e" x="142.0" y="418.0" font-size="11" text-anchor="end">Cruise state (0x200)</text>
+<line class="grid" stroke="#e1e0d9" x1="150.0" x2="930.0" y1="428.0" y2="428.0"/>
+<rect class="f-neutral" x="150.0" y="265.3" width="31.0" height="17.4" rx="2" fill="#d6d5cf"/>
+<rect class="f-neutral" x="270.8" y="265.3" width="657.2" height="17.4" rx="2" fill="#d6d5cf"/>
+<text class="f-text1" x="599.4" y="278.0" font-size="10.5" text-anchor="middle" fill="#0b0b0b">running</text>
+<rect class="f-critical" x="183.0" y="265.3" width="85.9" height="17.4" rx="2" fill="#d03b3b"/>
+<text class="t2" fill="#52514e" x="274.8" y="278.0" font-size="10.5">stalled 400 ms (injected)</text>
+<rect class="f-critical" x="192.0" y="293.3" width="77.1" height="17.4" rx="2" fill="#d03b3b"/>
+<text class="t2" fill="#52514e" x="275.1" y="306.0" font-size="10.5">stale after 41 ms: safe values sent</text>
+<path class="ring f-critical" stroke="#fcfcfb" d="M196.1,324.0 L202.1,330.0 L196.1,336.0 L190.1,330.0 Z" fill="#d03b3b"/>
+<text class="t2" fill="#52514e" x="206.1" y="334.0" font-size="10.5" text-anchor="start">+60 ms after the stall began</text>
+<path class="ring f-text2" stroke="#fcfcfb" d="M270.9,352.0 L276.9,358.0 L270.9,364.0 L264.9,358.0 Z" fill="#52514e"/>
+<text class="t2" fill="#52514e" x="280.9" y="362.0" font-size="10.5" text-anchor="start">task responds again: simulated ECU reset</text>
+<path class="ring f-good" stroke="#fcfcfb" d="M319.3,380.0 L325.3,386.0 L319.3,392.0 L313.3,386.0 Z" fill="#0ca30c"/>
+<text class="t2" fill="#52514e" x="329.3" y="390.0" font-size="10.5" text-anchor="start">after 200 ms healthy probation (driver must re-engage)</text>
+<rect class="f-s3" x="151.5" y="405.3" width="39.7" height="17.4" rx="2" fill="#1baf7a"/>
+<rect class="f-critical" x="193.3" y="405.3" width="235.3" height="17.4" rx="2" fill="#d03b3b"/>
+<text x="310.9" y="418.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Fault</text>
+<rect class="f-s1" x="430.5" y="405.3" width="318.8" height="17.4" rx="2" fill="#2a78d6"/>
+<text x="589.9" y="418.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Standby</text>
+<rect class="f-s3" x="751.3" y="405.3" width="176.0" height="17.4" rx="2" fill="#1baf7a"/>
+<text x="839.3" y="418.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Active</text></svg>

@@ -118,11 +118,6 @@ fw::Version FirmwareService::runningVersion() const {
   return running_.application_valid ? running_.header.version : fw::Version{};
 }
 
-bool FirmwareService::applicationValid() const {
-  const std::lock_guard<std::mutex> lock(mutex_);
-  return running_.application_valid;
-}
-
 bool FirmwareService::trialActive() const {
   const std::lock_guard<std::mutex> lock(mutex_);
   return trial_;

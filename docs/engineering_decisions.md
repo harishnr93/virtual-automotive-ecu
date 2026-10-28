@@ -22,6 +22,8 @@ linked under each entry.
 | 14 | [Timing is measured and reported, never asserted as a guarantee](#14-timing-is-measured-and-reported-never-asserted-as-a-guarantee) | Validation |
 | 15 | [Test-only fault injection in the product binary](#15-test-only-fault-injection-in-the-product-binary) | Validation |
 | 16 | [Machine-readable log lines as a test interface](#16-machine-readable-log-lines-as-a-test-interface) | Validation |
+| 17 | [Traces use a steady wall clock](#17-traces-use-a-steady-wall-clock) | Tooling |
+| 18 | [Result figures without plotting libraries](#18-result-figures-without-plotting-libraries) | Tooling |
 
 ---
 
@@ -176,3 +178,24 @@ defect" flag exist in the ECU binary and are inactive unless explicitly requeste
 **Why.** System tests can check internal reactions and their timing without debug interfaces.
 **Lesson.** This is a contract. Adding a non-numeric field to `SUMMARY` broke the parsers in
 Phase 6, so firmware data got its own line.
+
+### 17. Traces use a steady wall clock
+**Problem.** A CAN trace showed 0.85 s without frames although none were lost: WSL2 had stepped the
+system clock forward while re-syncing with Windows, so the wall-clock timestamps jumped.
+**Decision.** CAN traces and the ECU's epoch anchor use `core::steadyWallMicros()`: the wall clock
+read once, advanced by the monotonic clock. Timing *decisions* already used only the monotonic clock.
+**Price.** Over a long run the trace can drift from the real wall clock by the corrections it
+ignores; intervals inside the trace are always right. → [Results gallery](results_gallery.md#a-bug-the-figures-found)
+
+### 18. Result figures without plotting libraries
+**Decision.** A small SVG toolkit (`svg_charts.py`) instead of matplotlib. The installed matplotlib
+did not even import (it needs a newer numpy), and the project avoids dependencies.
+**Rules:**
+- one reference palette, with dark mode via `prefers-color-scheme`
+- one y-axis per panel
+- labels that never overlap
+- every figure drawn from a real run, with the date in the subtitle
+
+**Price.** Static images only, without hover or zoom; the numbers are also in the performance
+report. → [Results gallery](results_gallery.md)
+

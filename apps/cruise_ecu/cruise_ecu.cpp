@@ -245,7 +245,8 @@ void CruiseEcu::taskControl(const sched::ActivationInfo& activation) {
                            (output.state == control::CruiseState::Active)
                                ? core::strCat(" target_kph=", app::fixed(output.target_speed_kph, 1),
                                               " speed_kph=", app::fixed(inputs.vehicle_speed_kph, 1))
-                               : std::string{}));
+                               : std::string{},
+                           " t=", app::fixed(platform_.secondsSinceEpoch(now), 3), "s"));
     if ((output.state == control::CruiseState::Active) && (last_state_ == control::CruiseState::Standby)) {
       engagements_.fetch_add(1U);
     }

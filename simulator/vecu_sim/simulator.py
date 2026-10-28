@@ -136,6 +136,7 @@ def run_realtime(sim: VehicleSimulator, bus, duration_s: float) -> Dict[str, flo
     """Paces the simulation with the wall clock (the ECU runs in real time)."""
     steps = int(round(duration_s / STEP_S))
     start = time.monotonic()
+    wall_start = time.time()  # wall clock of simulated t = 0, to align with ECU logs and CAN traces
     max_lateness = 0.0
     late_steps = 0
     late_at = []  # simulated times of late steps (diagnostics of host stalls)
@@ -154,7 +155,8 @@ def run_realtime(sim: VehicleSimulator, bus, duration_s: float) -> Dict[str, flo
             sim.on_frame(frame, sim.t)
         for frame in sim.step():
             bus.send(frame)
-    return {"max_step_lateness_ms": max_lateness * 1000.0, "late_steps": late_steps, "late_at_s": late_at}
+    return {"max_step_lateness_ms": max_lateness * 1000.0, "late_steps": late_steps, "late_at_s": late_at,
+            "wall_start_s": wall_start}
 
 
 def write_csv(records: List[Dict[str, float]], path: Path) -> None:
@@ -196,7 +198,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.csv:
         write_csv(sim.records, args.csv)
     if args.svg:
-        svg_plot.write_run_plot(sim.records, args.svg, title=f"{scenario.name}: {scenario.description}")
+        svg_plot.write_run_plot(sim.records, args.svg, title=f"{scenario.name}: {scenario.description}",
+                                events=scenario.events)
     if args.report:
         args.report.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return 0

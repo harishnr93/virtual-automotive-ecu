@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="390" viewBox="0 0 960 390" role="img" aria-label="Fault detection and recovery: every fault class injected in one run" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"><title>Fault detection and recovery: every fault class injected in one run</title><style>.grid,.axis{stroke-width:1}.ring{stroke-width:2}text{font-family:system-ui, -apple-system, 'Segoe UI', sans-serif}@media (prefers-color-scheme: dark){.bg{fill:#1a1a19}.t1{fill:#f0efec}.t2{fill:#c3c2b7}.tm{fill:#898781}.grid{stroke:#2c2c2a}.axis{stroke:#383835}.ring{stroke:#1a1a19}.f-s1{fill:#3987e5}.s-s1{stroke:#3987e5}.f-s2{fill:#d95926}.s-s2{stroke:#d95926}.f-s3{fill:#199e70}.s-s3{stroke:#199e70}.f-s4{fill:#c98500}.s-s4{stroke:#c98500}.f-s5{fill:#d55181}.s-s5{stroke:#d55181}.f-s7{fill:#9085e9}.s-s7{stroke:#9085e9}.f-s8{fill:#e66767}.s-s8{stroke:#e66767}.f-surface{fill:#1a1a19}.s-surface{stroke:#1a1a19}.f-text1{fill:#f0efec}.s-text1{stroke:#f0efec}.f-text2{fill:#c3c2b7}.s-text2{stroke:#c3c2b7}.f-grid{fill:#2c2c2a}.s-grid{stroke:#2c2c2a}.f-axis{fill:#383835}.s-axis{stroke:#383835}.f-neutral{fill:#4a4a46}.s-neutral{stroke:#4a4a46}}</style><rect class="bg" fill="#fcfcfb" width="960" height="390" rx="6"/>
+<text class="t1" fill="#0b0b0b" x="20" y="28" font-size="15" font-weight="600">Fault detection and recovery: every fault class injected in one run</text>
+<text class="t2" fill="#52514e" x="20" y="47" font-size="12">Measured 2026-10-28, WSL2, software CAN bus, real-time processes; cruise ECU + vehicle simulator + test-only ECU injections</text>
+<line class="grid" stroke="#e1e0d9" x1="190.0" x2="190.0" y1="100.0" y2="280.0"/>
+<text class="tm" fill="#898781" x="190.0" y="295.0" font-size="10.5" text-anchor="middle">0</text>
+<line class="grid" stroke="#e1e0d9" x1="300.3" x2="300.3" y1="100.0" y2="280.0"/>
+<text class="tm" fill="#898781" x="300.3" y="295.0" font-size="10.5" text-anchor="middle">5</text>
+<line class="grid" stroke="#e1e0d9" x1="410.7" x2="410.7" y1="100.0" y2="280.0"/>
+<text class="tm" fill="#898781" x="410.7" y="295.0" font-size="10.5" text-anchor="middle">10</text>
+<line class="grid" stroke="#e1e0d9" x1="521.0" x2="521.0" y1="100.0" y2="280.0"/>
+<text class="tm" fill="#898781" x="521.0" y="295.0" font-size="10.5" text-anchor="middle">15</text>
+<line class="grid" stroke="#e1e0d9" x1="631.3" x2="631.3" y1="100.0" y2="280.0"/>
+<text class="tm" fill="#898781" x="631.3" y="295.0" font-size="10.5" text-anchor="middle">20</text>
+<line class="grid" stroke="#e1e0d9" x1="741.6" x2="741.6" y1="100.0" y2="280.0"/>
+<text class="tm" fill="#898781" x="741.6" y="295.0" font-size="10.5" text-anchor="middle">25</text>
+<line class="grid" stroke="#e1e0d9" x1="852.0" x2="852.0" y1="100.0" y2="280.0"/>
+<text class="tm" fill="#898781" x="852.0" y="295.0" font-size="10.5" text-anchor="middle">30</text>
+<line class="s-text2" x1="830.1" x2="830.1" y1="88.0" y2="280.0" stroke="#52514e" stroke-width="1"/>
+<text class="t2" fill="#52514e" x="834.1" y="86.0" font-size="10.5" text-anchor="start">UDS hard reset</text>
+<text class="tm" fill="#898781" x="930.0" y="310.0" font-size="10.5" text-anchor="end">ECU time [s]</text>
+<rect class="f-text2" x="150.0" y="326.0" width="14" height="12" rx="2" fill="#52514e"/>
+<text class="t2" fill="#52514e" x="170.0" y="336.0" font-size="11">fault cause (injected)</text>
+<rect class="f-critical" x="346.0" y="326.0" width="14" height="12" rx="2" fill="#d03b3b"/>
+<text class="t2" fill="#52514e" x="366.0" y="336.0" font-size="11">fault active (qualified until recovered)</text>
+<rect class="f-neutral" x="150.0" y="350.0" width="14" height="12" rx="2" fill="#d6d5cf"/>
+<text class="t2" fill="#52514e" x="170.0" y="360.0" font-size="11">Off</text>
+<rect class="f-s1" x="205.0" y="350.0" width="14" height="12" rx="2" fill="#2a78d6"/>
+<text class="t2" fill="#52514e" x="225.0" y="360.0" font-size="11">Standby</text>
+<rect class="f-s3" x="288.0" y="350.0" width="14" height="12" rx="2" fill="#1baf7a"/>
+<text class="t2" fill="#52514e" x="308.0" y="360.0" font-size="11">Active</text>
+<rect class="f-s4" x="364.0" y="350.0" width="14" height="12" rx="2" fill="#eda100"/>
+<text class="t2" fill="#52514e" x="384.0" y="360.0" font-size="11">Override</text>
+<rect class="f-critical" x="454.0" y="350.0" width="14" height="12" rx="2" fill="#d03b3b"/>
+<text class="t2" fill="#52514e" x="474.0" y="360.0" font-size="11">Fault</text>
+<text class="t2" fill="#52514e" x="182.0" y="119.0" font-size="11" text-anchor="end">SpeedSignalInvalid</text>
+<line class="grid" stroke="#e1e0d9" x1="190.0" x2="930.0" y1="130.0" y2="130.0"/>
+<text class="t2" fill="#52514e" x="182.0" y="149.0" font-size="11" text-anchor="end">SpeedSignalStale</text>
+<line class="grid" stroke="#e1e0d9" x1="190.0" x2="930.0" y1="160.0" y2="160.0"/>
+<text class="t2" fill="#52514e" x="182.0" y="179.0" font-size="11" text-anchor="end">TaskDeadlineMiss</text>
+<line class="grid" stroke="#e1e0d9" x1="190.0" x2="930.0" y1="190.0" y2="190.0"/>
+<text class="t2" fill="#52514e" x="182.0" y="209.0" font-size="11" text-anchor="end">WatchdogExpired</text>
+<line class="grid" stroke="#e1e0d9" x1="190.0" x2="930.0" y1="220.0" y2="220.0"/>
+<text class="t2" fill="#52514e" x="182.0" y="239.0" font-size="11" text-anchor="end">ControllerFault</text>
+<line class="grid" stroke="#e1e0d9" x1="190.0" x2="930.0" y1="250.0" y2="250.0"/>
+<text class="t2" fill="#52514e" x="182.0" y="269.0" font-size="11" text-anchor="end">Cruise state (0x200)</text>
+<line class="grid" stroke="#e1e0d9" x1="190.0" x2="930.0" y1="280.0" y2="280.0"/>
+<rect class="f-critical" x="291.7" y="111.8" width="12.6" height="13.5" rx="2" fill="#d03b3b"/>
+<rect class="f-text2" x="290.3" y="103.6" width="2.4" height="4.8" rx="2" fill="#52514e"/>
+<rect class="f-critical" x="402.0" y="141.8" width="5.5" height="13.5" rx="2" fill="#d03b3b"/>
+<rect class="f-text2" x="400.7" y="133.6" width="4.6" height="4.8" rx="2" fill="#52514e"/>
+<rect class="f-critical" x="514.4" y="171.8" width="39.9" height="13.5" rx="2" fill="#d03b3b"/>
+<rect class="f-text2" x="509.9" y="163.6" width="20.1" height="4.8" rx="2" fill="#52514e"/>
+<rect class="f-critical" x="654.7" y="201.8" width="173.4" height="13.5" rx="2" fill="#d03b3b"/>
+<rect class="f-text2" x="653.4" y="193.6" width="6.8" height="4.8" rx="2" fill="#52514e"/>
+<rect class="f-critical" x="785.8" y="231.8" width="42.4" height="13.5" rx="2" fill="#d03b3b"/>
+<rect class="f-text2" x="785.8" y="223.6" width="1.5" height="4.8" rx="2" fill="#52514e"/>
+<rect class="f-neutral" x="202.1" y="255.7" width="1.5" height="18.6" rx="2" fill="#d6d5cf"/>
+<rect class="f-s1" x="202.9" y="255.7" width="20.1" height="18.6" rx="2" fill="#2a78d6"/>
+<rect class="f-s4" x="225.0" y="255.7" width="4.6" height="18.6" rx="2" fill="#eda100"/>
+<rect class="f-s3" x="231.6" y="255.7" width="58.9" height="18.6" rx="2" fill="#1baf7a"/>
+<text x="261.1" y="269.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Active</text>
+<rect class="f-critical" x="292.5" y="255.7" width="23.2" height="18.6" rx="2" fill="#d03b3b"/>
+<rect class="f-s1" x="317.7" y="255.7" width="15.7" height="18.6" rx="2" fill="#2a78d6"/>
+<rect class="f-s3" x="335.3" y="255.7" width="65.5" height="18.6" rx="2" fill="#1baf7a"/>
+<text x="368.1" y="269.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Active</text>
+<rect class="f-critical" x="402.9" y="255.7" width="16.1" height="18.6" rx="2" fill="#d03b3b"/>
+<rect class="f-s1" x="421.0" y="255.7" width="22.7" height="18.6" rx="2" fill="#2a78d6"/>
+<rect class="f-s3" x="445.7" y="255.7" width="67.3" height="18.6" rx="2" fill="#1baf7a"/>
+<text x="479.3" y="269.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Active</text>
+<rect class="f-critical" x="515.0" y="255.7" width="50.5" height="18.6" rx="2" fill="#d03b3b"/>
+<text x="540.2" y="269.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Fault</text>
+<rect class="f-s1" x="567.5" y="255.7" width="19.6" height="18.6" rx="2" fill="#2a78d6"/>
+<rect class="f-s3" x="589.1" y="255.7" width="63.3" height="18.6" rx="2" fill="#1baf7a"/>
+<text x="620.7" y="269.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Active</text>
+<rect class="f-critical" x="654.4" y="255.7" width="21.8" height="18.6" rx="2" fill="#d03b3b"/>
+<rect class="f-s1" x="678.2" y="255.7" width="30.2" height="18.6" rx="2" fill="#2a78d6"/>
+<rect class="f-s3" x="710.5" y="255.7" width="73.5" height="18.6" rx="2" fill="#1baf7a"/>
+<text x="747.2" y="269.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Active</text>
+<rect class="f-critical" x="785.9" y="255.7" width="42.6" height="18.6" rx="2" fill="#d03b3b"/>
+<rect class="f-s1" x="830.5" y="255.7" width="1.5" height="18.6" rx="2" fill="#2a78d6"/>
+<rect class="f-neutral" x="830.9" y="255.7" width="1.5" height="18.6" rx="2" fill="#d6d5cf"/>
+<rect class="f-s1" x="831.8" y="255.7" width="31.1" height="18.6" rx="2" fill="#2a78d6"/>
+<rect class="f-s3" x="864.9" y="255.7" width="63.1" height="18.6" rx="2" fill="#1baf7a"/>
+<text x="896.5" y="269.0" font-size="10.5" text-anchor="middle" fill="#ffffff">Active</text></svg>

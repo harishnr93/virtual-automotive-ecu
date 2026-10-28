@@ -139,6 +139,33 @@ def test_update_trial_confirmation_and_persistence(env):
         stop(ecu)
 
 
+def test_explicit_rollback_routine_over_uds(env):
+    """Routine 0x0201: back to the previous confirmed image (found missing by the coverage report)."""
+    port, flash, client = env
+    ecu = start_ecu(port, flash, "--confirm-after", "0.5")
+    try:
+        assert wait_ready(client) == "00.06.00"
+        client.diagnostic_session_control(SESSIONS["extended"])
+        with pytest.raises(NegativeResponseError) as error:  # only one image: nothing to roll back to
+            client.routine_control(0x0201)
+        assert error.value.nrc == 0x22
+        client.diagnostic_session_control(SESSIONS["default"])
+        client.flash_image(image((0, 7, 0)))
+        deadline = time.monotonic() + 5.0
+        while fw_status(client)["state_b"] != "Confirmed":
+            assert time.monotonic() < deadline, "0.7.0 not confirmed"
+            time.sleep(0.1)
+        client.diagnostic_session_control(SESSIONS["extended"])
+        assert client.routine_control(0x0201) == bytes([0x00])
+        client.ecu_reset(0x01)
+        assert wait_ready(client) == "00.06.00"
+        status = fw_status(client)
+        assert (status["running_slot"], status["state_a"], status["state_b"]) == ("A", "Confirmed", "Confirmed")
+    finally:
+        log = stop(ecu)
+    assert "FW_ROLLBACK_REQUEST result=Ok" in log
+
+
 # ------------------------------------------------------------ 2. rejected images ----
 
 def test_invalid_images_and_protocol_errors_are_rejected(env):

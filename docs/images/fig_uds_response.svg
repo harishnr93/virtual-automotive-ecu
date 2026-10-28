@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="412" viewBox="0 0 960 412" role="img" aria-label="UDS response time while cruising" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"><title>UDS response time while cruising</title><style>.grid,.axis{stroke-width:1}.ring{stroke-width:2}text{font-family:system-ui, -apple-system, 'Segoe UI', sans-serif}@media (prefers-color-scheme: dark){.bg{fill:#1a1a19}.t1{fill:#f0efec}.t2{fill:#c3c2b7}.tm{fill:#898781}.grid{stroke:#2c2c2a}.axis{stroke:#383835}.ring{stroke:#1a1a19}.f-s1{fill:#3987e5}.s-s1{stroke:#3987e5}.f-s2{fill:#d95926}.s-s2{stroke:#d95926}.f-s3{fill:#199e70}.s-s3{stroke:#199e70}.f-s4{fill:#c98500}.s-s4{stroke:#c98500}.f-s5{fill:#d55181}.s-s5{stroke:#d55181}.f-s7{fill:#9085e9}.s-s7{stroke:#9085e9}.f-s8{fill:#e66767}.s-s8{stroke:#e66767}.f-surface{fill:#1a1a19}.s-surface{stroke:#1a1a19}.f-text1{fill:#f0efec}.s-text1{stroke:#f0efec}.f-text2{fill:#c3c2b7}.s-text2{stroke:#c3c2b7}.f-grid{fill:#2c2c2a}.s-grid{stroke:#2c2c2a}.f-axis{fill:#383835}.s-axis{stroke:#383835}.f-neutral{fill:#4a4a46}.s-neutral{stroke:#4a4a46}}</style><rect class="bg" fill="#fcfcfb" width="960" height="412" rx="6"/>
+<text class="t1" fill="#0b0b0b" x="20" y="28" font-size="15" font-weight="600">UDS response time while cruising</text>
+<text class="t2" fill="#52514e" x="20" y="47" font-size="12">Measured 2026-10-28, WSL2, software CAN bus, real-time processes; 300 requests each, Python tester, P2 server = 50 ms</text>
+<rect class="f-s1" x="80.0" y="66.0" width="14" height="12" rx="2" fill="#2a78d6"/>
+<text class="t2" fill="#52514e" x="100.0" y="76.0" font-size="11">single-frame response (22 0100): median 10.0 ms, n = 300</text>
+<rect class="f-s2" x="514.0" y="66.0" width="14" height="12" rx="2" fill="#eb6834"/>
+<text class="t2" fill="#52514e" x="534.0" y="76.0" font-size="11">multi-frame response (22 F190): median 20.0 ms, n = 300</text>
+<line class="grid" stroke="#e1e0d9" x1="80.0" x2="930.0" y1="332.0" y2="332.0"/>
+<text class="tm" fill="#898781" x="74.0" y="336.0" font-size="11" text-anchor="end">0</text>
+<line class="grid" stroke="#e1e0d9" x1="80.0" x2="930.0" y1="277.0" y2="277.0"/>
+<text class="tm" fill="#898781" x="74.0" y="281.0" font-size="11" text-anchor="end">50</text>
+<line class="grid" stroke="#e1e0d9" x1="80.0" x2="930.0" y1="222.0" y2="222.0"/>
+<text class="tm" fill="#898781" x="74.0" y="226.0" font-size="11" text-anchor="end">100</text>
+<line class="grid" stroke="#e1e0d9" x1="80.0" x2="930.0" y1="167.0" y2="167.0"/>
+<text class="tm" fill="#898781" x="74.0" y="171.0" font-size="11" text-anchor="end">150</text>
+<line class="grid" stroke="#e1e0d9" x1="80.0" x2="930.0" y1="112.0" y2="112.0"/>
+<text class="tm" fill="#898781" x="74.0" y="116.0" font-size="11" text-anchor="end">200</text>
+<text class="t2" fill="#52514e" x="80.0" y="104.0" font-size="12">Requests</text>
+<line class="axis" stroke="#c3c2b7" x1="80.0" x2="930.0" y1="332.0" y2="332.0"/>
+<text class="tm" fill="#898781" x="80.0" y="347.0" font-size="11" text-anchor="middle">0</text>
+<text class="tm" fill="#898781" x="250.0" y="347.0" font-size="11" text-anchor="middle">5</text>
+<text class="tm" fill="#898781" x="420.0" y="347.0" font-size="11" text-anchor="middle">10</text>
+<text class="tm" fill="#898781" x="590.0" y="347.0" font-size="11" text-anchor="middle">15</text>
+<text class="tm" fill="#898781" x="760.0" y="347.0" font-size="11" text-anchor="middle">20</text>
+<text class="tm" fill="#898781" x="930.0" y="347.0" font-size="11" text-anchor="middle">25</text>
+<text class="t2" fill="#52514e" x="930.0" y="362.0" font-size="11" text-anchor="end">response time [ms] (request sent → complete response received)</text>
+<line class="s-muted" x1="420.0" x2="420.0" y1="112.0" y2="332.0" stroke="#898781" stroke-width="1"/>
+<text class="tm" fill="#898781" x="424.0" y="124.0" font-size="11" text-anchor="start">10 ms Dcm cycle</text>
+<line class="s-muted" x1="760.0" x2="760.0" y1="112.0" y2="332.0" stroke="#898781" stroke-width="1"/>
+<text class="tm" fill="#898781" x="764.0" y="124.0" font-size="11" text-anchor="start">20 ms Dcm cycle</text>
+<path class="f-s1" d="M149.0,332.0 V332.0 Q149.0,330.9 150.1,330.9 H162.9 Q164.0,330.9 164.0,332.0 V332.0 Z" fill="#2a78d6"/>
+<path class="f-s1" d="M387.0,332.0 V332.0 Q387.0,330.9 388.1,330.9 H400.9 Q402.0,330.9 402.0,332.0 V332.0 Z" fill="#2a78d6"/>
+<path class="f-s1" d="M404.0,332.0 V144.6 Q404.0,140.6 408.0,140.6 H415.0 Q419.0,140.6 419.0,144.6 V332.0 Z" fill="#2a78d6"/>
+<path class="f-s1" d="M421.0,332.0 V199.6 Q421.0,195.6 425.0,195.6 H432.0 Q436.0,195.6 436.0,199.6 V332.0 Z" fill="#2a78d6"/>
+<path class="f-s2" d="M744.0,332.0 V121.5 Q744.0,117.5 748.0,117.5 H755.0 Q759.0,117.5 759.0,121.5 V332.0 Z" fill="#eb6834"/>
+<path class="f-s2" d="M761.0,332.0 V220.5 Q761.0,216.5 765.0,216.5 H772.0 Q776.0,216.5 776.0,220.5 V332.0 Z" fill="#eb6834"/></svg>

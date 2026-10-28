@@ -23,6 +23,8 @@ option(VECU_BUILD_TESTS "Build unit and integration tests" ON)
 option(VECU_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(VECU_ENABLE_SANITIZERS "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(VECU_ENABLE_TSAN "Build with ThreadSanitizer (data-race detection)" OFF)
+option(VECU_ENABLE_COVERAGE "Build with gcov instrumentation (line/function coverage, GCC)" OFF)
+option(VECU_BUILD_FUZZERS "Build libFuzzer targets for the input parsers (Clang; includes ASan + UBSan)" OFF)
 
 find_package(Threads REQUIRED)
 
@@ -46,6 +48,30 @@ endif()
 if(VECU_ENABLE_SANITIZERS AND VECU_ENABLE_TSAN)
   message(FATAL_ERROR "VECU_ENABLE_SANITIZERS (ASan) and VECU_ENABLE_TSAN cannot be combined")
 endif()
+if(VECU_ENABLE_COVERAGE)
+  if(VECU_ENABLE_SANITIZERS OR VECU_ENABLE_TSAN)
+    message(FATAL_ERROR "VECU_ENABLE_COVERAGE cannot be combined with sanitizers")
+  endif()
+  if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(FATAL_ERROR "VECU_ENABLE_COVERAGE needs GCC (gcov); see scripts/run_coverage.sh")
+  endif()
+  # -O0 keeps the line mapping exact; VECU_COVERAGE lets emergency exits flush the counters.
+  target_compile_options(vecu_compile_options INTERFACE --coverage -O0 -g)
+  target_compile_definitions(vecu_compile_options INTERFACE VECU_COVERAGE=1)
+  target_link_options(vecu_compile_options INTERFACE --coverage)
+endif()
+if(VECU_BUILD_FUZZERS)
+  if(VECU_ENABLE_SANITIZERS OR VECU_ENABLE_TSAN OR VECU_ENABLE_COVERAGE)
+    message(FATAL_ERROR "VECU_BUILD_FUZZERS already includes ASan + UBSan; do not combine it with other instrumentation")
+  endif()
+  if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message(FATAL_ERROR "VECU_BUILD_FUZZERS needs Clang (libFuzzer): CXX=clang++ cmake ...")
+  endif()
+  # Coverage feedback for the fuzzer in every library; the fuzz executables add -fsanitize=fuzzer.
+  target_compile_options(vecu_compile_options INTERFACE
+    -fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+  target_link_options(vecu_compile_options INTERFACE -fsanitize=address,undefined)
+endif()
 if(VECU_ENABLE_SANITIZERS)
   target_compile_options(vecu_compile_options INTERFACE
     -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all)
@@ -55,13 +81,18 @@ set(VECU_TEST_LAUNCHER "")
 if(VECU_ENABLE_TSAN)
   target_compile_options(vecu_compile_options INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
   target_link_options(vecu_compile_options INTERFACE -fsanitize=thread)
-  # GCC 11's TSan aborts ("unexpected memory mapping") on kernels with 32-bit mmap ASLR
-  # (Linux >= 6.5, including WSL2 6.6). Running the tests with ASLR disabled avoids it.
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12)
     message(WARNING "GCC < 12 TSan does not intercept pthread_cond_clockwait (used by "
                     "condition_variable::wait_for) and reports false 'double lock' errors. "
                     "Prefer: CXX=clang++ cmake -DVECU_ENABLE_TSAN=ON ...")
   endif()
+endif()
+
+# Sanitizer runtimes of this toolchain generation (GCC 11 TSan, Clang 14 TSan/ASan) can fail at
+# start-up on kernels with 32-bit mmap ASLR (Linux >= 6.5, including WSL2 6.6): measured for the
+# fuzz targets, 18 of 60 starts crashed before running any input, 0 of 60 with ASLR disabled.
+# Tests of these builds therefore run with ASLR disabled.
+if(VECU_ENABLE_TSAN OR VECU_BUILD_FUZZERS)
   find_program(VECU_SETARCH setarch)
   if(VECU_SETARCH)
     set(VECU_TEST_LAUNCHER ${VECU_SETARCH} ${CMAKE_SYSTEM_PROCESSOR} -R)

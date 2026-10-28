@@ -19,7 +19,7 @@ import pytest
 
 from vecu_sim.isotp import IsoTpEndpoint
 from vecu_sim.udp_can_bus import UdpCanBus
-from vecu_sim.uds_client import DIDS, NegativeResponseError, UdsClient, decode_did
+from vecu_sim.uds_client import DIDS, NegativeResponseError, UdsClient, decode_did, dtc_to_text
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 BIN_DIR = pathlib.Path(os.environ.get("VECU_BIN_DIR", REPO / "build" / "bin"))
@@ -147,7 +147,7 @@ def test_full_diagnostic_session(system):
         # fails would immediately re-confirm the DTC.
         return status is not None and (status & 0x01) == 0
     assert wait_for(implausible_confirmed_and_over, 8.0, 0.1)
-    assert client.read_dtc_count(CONFIRMED) == 2
+    assert client.read_dtc_count(CONFIRMED) == 2, [dtc_to_text(c) for c, _ in client.read_dtc_by_status_mask(CONFIRMED)]
 
     # --- clear all DTCs --------------------------------------------------------------------
     client.clear_diagnostic_information(0xFFFFFF)

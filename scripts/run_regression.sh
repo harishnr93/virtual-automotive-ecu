@@ -9,6 +9,7 @@
 #   gcc     build/             GCC, RelWithDebInfo, warnings as errors
 #   asan    build-asan/        GCC, Debug, AddressSanitizer + UndefinedBehaviorSanitizer
 #   tsan    build-tsan-clang/  Clang, Debug, ThreadSanitizer (tests run with ASLR disabled)
+#   fuzz    build-fuzz/        Clang libFuzzer targets (ASan + UBSan), each run for 15 s (label fuzz)
 #   static  cppcheck + clang-tidy on src/ and apps/ (uses build/compile_commands.json)
 #
 # Logs and JUnit reports: logs/regression/<stage>.log, logs/regression/<stage>-junit.xml
@@ -33,6 +34,11 @@ while [ $# -gt 0 ]; do
 done
 
 mkdir -p "$OUT"
+
+# Seconds of a monotonic clock: stage durations must not depend on the wall clock (WSL2 steps it
+# when re-syncing with Windows). A wall-clock stage time once read ~23 min for a stage whose build
+# took 10 s and whose tests took 169 s (cause: a clock step or a host suspend, not determinable).
+uptime_s() { cut -d' ' -f1 /proc/uptime | cut -d. -f1; }
 declare -a SUMMARY=()
 failed=0
 
@@ -41,7 +47,7 @@ run_stage() {
   local name="$1" dir="$ROOT/$2" cxx="$3" type="$4"
   shift 4
   local log="$OUT/$name.log" start result tests
-  start=$(date +%s)
+  start=$(uptime_s)
   echo "== [$name] configure + build ($dir)"
   {
     if [ ! -f "$dir/CMakeCache.txt" ]; then
@@ -62,7 +68,7 @@ run_stage() {
   result=$?
   tests=$(grep -E "tests passed, .* tests failed out of" "$log" | tail -1)
   if [ $result -eq 0 ]; then
-    SUMMARY+=("$(printf '%-7s %-6s %s (%ss)' "$name" PASS "$tests" $(( $(date +%s) - start )))")
+    SUMMARY+=("$(printf '%-7s %-6s %s (%ss)' "$name" PASS "$tests" $(( $(uptime_s) - start )))")
   else
     SUMMARY+=("$(printf '%-7s %-6s %s, see %s' "$name" FAIL "${tests:-tests did not run}" "$log")")
     failed=1
@@ -74,8 +80,13 @@ if [ $QUICK -eq 0 ]; then
   run_stage asan build-asan g++ Debug -DVECU_ENABLE_SANITIZERS=ON
   if command -v clang++ >/dev/null; then
     run_stage tsan build-tsan-clang clang++ Debug -DVECU_ENABLE_TSAN=ON
+    saved_label="$LABEL"
+    LABEL=fuzz  # the fuzz build also contains the unit tests; the asan stage already ran those
+    run_stage fuzz build-fuzz clang++ RelWithDebInfo -DVECU_BUILD_FUZZERS=ON
+    LABEL="$saved_label"
   else
     SUMMARY+=("$(printf '%-7s %-6s %s' tsan SKIP 'clang++ not installed')")
+    SUMMARY+=("$(printf '%-7s %-6s %s' fuzz SKIP 'clang++ not installed')")
   fi
   echo "== [static] cppcheck + clang-tidy"
   if "$ROOT/scripts/run_static_analysis.sh" "$ROOT/build" > "$OUT/static.log" 2>&1; then

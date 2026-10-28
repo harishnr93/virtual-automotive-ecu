@@ -1,4 +1,5 @@
 #include "core/os_port.hpp"
+#include "core/clock.hpp"
 
 #include <gtest/gtest.h>
 #include <pthread.h>
@@ -127,3 +128,16 @@ TEST(PiMutex, TryLockFailsWhileHeldByAnotherThread) {
 
 }  // namespace
 }  // namespace vecu::os
+
+// ------------------------------------------------------------- steady wall clock ----
+
+TEST(SteadyWallClock, NeverGoesBackwardsAndStartsAtTheWallClock) {
+  const std::int64_t wall = vecu::core::wallClockMicros();
+  std::int64_t previous = vecu::core::steadyWallMicros();
+  EXPECT_LT(std::llabs(previous - wall), 1000000LL);  // anchored to the real wall clock
+  for (int i = 0; i < 10000; ++i) {
+    const std::int64_t current = vecu::core::steadyWallMicros();
+    ASSERT_GE(current, previous);
+    previous = current;
+  }
+}

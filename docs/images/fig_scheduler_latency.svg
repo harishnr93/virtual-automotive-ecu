@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="356" viewBox="0 0 960 356" role="img" aria-label="Scheduler: task start latency against the deadline" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"><title>Scheduler: task start latency against the deadline</title><style>.grid,.axis{stroke-width:1}.ring{stroke-width:2}text{font-family:system-ui, -apple-system, 'Segoe UI', sans-serif}@media (prefers-color-scheme: dark){.bg{fill:#1a1a19}.t1{fill:#f0efec}.t2{fill:#c3c2b7}.tm{fill:#898781}.grid{stroke:#2c2c2a}.axis{stroke:#383835}.ring{stroke:#1a1a19}.f-s1{fill:#3987e5}.s-s1{stroke:#3987e5}.f-s2{fill:#d95926}.s-s2{stroke:#d95926}.f-s3{fill:#199e70}.s-s3{stroke:#199e70}.f-s4{fill:#c98500}.s-s4{stroke:#c98500}.f-s5{fill:#d55181}.s-s5{stroke:#d55181}.f-s7{fill:#9085e9}.s-s7{stroke:#9085e9}.f-s8{fill:#e66767}.s-s8{stroke:#e66767}.f-surface{fill:#1a1a19}.s-surface{stroke:#1a1a19}.f-text1{fill:#f0efec}.s-text1{stroke:#f0efec}.f-text2{fill:#c3c2b7}.s-text2{stroke:#c3c2b7}.f-grid{fill:#2c2c2a}.s-grid{stroke:#2c2c2a}.f-axis{fill:#383835}.s-axis{stroke:#383835}.f-neutral{fill:#4a4a46}.s-neutral{stroke:#4a4a46}}</style><rect class="bg" fill="#fcfcfb" width="960" height="356" rx="6"/>
+<text class="t1" fill="#0b0b0b" x="20" y="28" font-size="15" font-weight="600">Scheduler: task start latency against the deadline</text>
+<text class="t2" fill="#52514e" x="20" y="47" font-size="12">Measured 2026-10-28, WSL2, vecu_sched_bench; 10 s per condition, SCHED_OTHER</text>
+<text class="t2" fill="#52514e" x="202.0" y="117.0" font-size="10.5" text-anchor="end">Task_10ms · light load</text>
+<text class="t2" fill="#52514e" x="202.0" y="143.0" font-size="10.5" text-anchor="end">Task_10ms · 16 CPU-stress threads</text>
+<text class="t2" fill="#52514e" x="202.0" y="169.0" font-size="10.5" text-anchor="end">Task_20ms · light load</text>
+<line class="grid" stroke="#e1e0d9" x1="30.0" x2="930.0" y1="152.0" y2="152.0"/>
+<text class="t2" fill="#52514e" x="202.0" y="195.0" font-size="10.5" text-anchor="end">Task_20ms · 16 CPU-stress threads</text>
+<text class="t2" fill="#52514e" x="202.0" y="221.0" font-size="10.5" text-anchor="end">Task_100ms · light load</text>
+<line class="grid" stroke="#e1e0d9" x1="30.0" x2="930.0" y1="204.0" y2="204.0"/>
+<text class="t2" fill="#52514e" x="202.0" y="247.0" font-size="10.5" text-anchor="end">Task_100ms · 16 CPU-stress threads</text>
+<rect class="f-s1" x="150.0" y="302.0" width="14" height="12" rx="2" fill="#2a78d6"/>
+<text class="t2" fill="#52514e" x="170.0" y="312.0" font-size="11">light load</text>
+<rect class="f-s2" x="262.0" y="302.0" width="14" height="12" rx="2" fill="#eb6834"/>
+<text class="t2" fill="#52514e" x="282.0" y="312.0" font-size="11">16 CPU-stress threads</text>
+<circle class="f-text2" cx="466.0" cy="308.0" r="4" fill="#52514e"/>
+<text class="t2" fill="#52514e" x="477.0" y="312.0" font-size="11">median</text>
+<circle class="f-surface s-text2" cx="538.0" cy="308.0" r="4" fill="#fcfcfb" stroke="#52514e" stroke-width="2"/>
+<text class="t2" fill="#52514e" x="549.0" y="312.0" font-size="11">p99</text>
+<path class="f-text2" d="M589.0,302.0 L595.0,308.0 L589.0,314.0 L583.0,308.0 Z" fill="#52514e"/>
+<text class="t2" fill="#52514e" x="602.0" y="312.0" font-size="11">max</text>
+<rect class="f-critical" x="637.0" y="302.0" width="14" height="12" rx="2" fill="#d03b3b"/>
+<text class="t2" fill="#52514e" x="657.0" y="312.0" font-size="11">deadline</text>
+<line class="grid" stroke="#e1e0d9" x1="210.0" x2="210.0" y1="100.0" y2="256.0"/>
+<line class="grid" stroke="#e1e0d9" x1="377.4" x2="377.4" y1="100.0" y2="256.0"/>
+<line class="grid" stroke="#e1e0d9" x1="544.8" x2="544.8" y1="100.0" y2="256.0"/>
+<line class="grid" stroke="#e1e0d9" x1="712.2" x2="712.2" y1="100.0" y2="256.0"/>
+<line class="grid" stroke="#e1e0d9" x1="879.6" x2="879.6" y1="100.0" y2="256.0"/>
+<line class="axis" stroke="#c3c2b7" x1="210.0" x2="930.0" y1="256.0" y2="256.0"/>
+<text class="tm" fill="#898781" x="210.0" y="271.0" font-size="11" text-anchor="middle">10 µs</text>
+<text class="tm" fill="#898781" x="377.4" y="271.0" font-size="11" text-anchor="middle">100 µs</text>
+<text class="tm" fill="#898781" x="544.8" y="271.0" font-size="11" text-anchor="middle">1 ms</text>
+<text class="tm" fill="#898781" x="712.2" y="271.0" font-size="11" text-anchor="middle">10 ms</text>
+<text class="tm" fill="#898781" x="879.6" y="271.0" font-size="11" text-anchor="middle">100 ms</text>
+<text class="t2" fill="#52514e" x="930.0" y="286.0" font-size="11" text-anchor="end">start latency (log scale)</text>
+<line class="s-s1" x1="411.1" x2="646.3" y1="113.0" y2="113.0" stroke="#2a78d6" stroke-width="2"/>
+<circle class="ring f-s1" stroke="#fcfcfb" cx="411.1" cy="113.0" r="4.0" fill="#2a78d6"/>
+<circle class="f-surface s-s1" cx="508.6" cy="113.0" r="4.0" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"/>
+<path class="f-s1" d="M646.3,107.0 L652.3,113.0 L646.3,119.0 L640.3,113.0 Z" fill="#2a78d6"/>
+<text class="t2" fill="#52514e" x="656.3" y="117.0" font-size="11" text-anchor="start">max 4.0 ms</text>
+<line class="s-critical" x1="712.2" x2="712.2" y1="104.0" y2="122.0" stroke="#d03b3b" stroke-width="2"/>
+<line class="s-s2" x1="316.4" x2="677.0" y1="139.0" y2="139.0" stroke="#eb6834" stroke-width="2"/>
+<circle class="ring f-s2" stroke="#fcfcfb" cx="316.4" cy="139.0" r="4.0" fill="#eb6834"/>
+<circle class="f-surface s-s2" cx="648.4" cy="139.0" r="4.0" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"/>
+<path class="f-s2" d="M677.0,133.0 L683.0,139.0 L677.0,145.0 L671.0,139.0 Z" fill="#eb6834"/>
+<text class="t2" fill="#52514e" x="687.0" y="143.0" font-size="11" text-anchor="start">max 6.2 ms</text>
+<line class="s-critical" x1="712.2" x2="712.2" y1="130.0" y2="148.0" stroke="#d03b3b" stroke-width="2"/>
+<line class="s-s1" x1="412.7" x2="625.9" y1="165.0" y2="165.0" stroke="#2a78d6" stroke-width="2"/>
+<circle class="ring f-s1" stroke="#fcfcfb" cx="412.7" cy="165.0" r="4.0" fill="#2a78d6"/>
+<circle class="f-surface s-s1" cx="521.2" cy="165.0" r="4.0" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"/>
+<path class="f-s1" d="M625.9,159.0 L631.9,165.0 L625.9,171.0 L619.9,165.0 Z" fill="#2a78d6"/>
+<text class="t2" fill="#52514e" x="635.9" y="169.0" font-size="11" text-anchor="start">max 3.1 ms</text>
+<line class="s-critical" x1="762.6" x2="762.6" y1="156.0" y2="174.0" stroke="#d03b3b" stroke-width="2"/>
+<line class="s-s2" x1="341.3" x2="664.3" y1="191.0" y2="191.0" stroke="#eb6834" stroke-width="2"/>
+<circle class="ring f-s2" stroke="#fcfcfb" cx="341.3" cy="191.0" r="4.0" fill="#eb6834"/>
+<circle class="f-surface s-s2" cx="664.1" cy="191.0" r="4.0" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"/>
+<path class="f-s2" d="M664.3,185.0 L670.3,191.0 L664.3,197.0 L658.3,191.0 Z" fill="#eb6834"/>
+<text class="t2" fill="#52514e" x="674.3" y="195.0" font-size="11" text-anchor="start">max 5.2 ms</text>
+<line class="s-critical" x1="762.6" x2="762.6" y1="182.0" y2="200.0" stroke="#d03b3b" stroke-width="2"/>
+<line class="s-s1" x1="393.0" x2="591.1" y1="217.0" y2="217.0" stroke="#2a78d6" stroke-width="2"/>
+<circle class="ring f-s1" stroke="#fcfcfb" cx="393.0" cy="217.0" r="4.0" fill="#2a78d6"/>
+<circle class="f-surface s-s1" cx="529.5" cy="217.0" r="4.0" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"/>
+<path class="f-s1" d="M591.1,211.0 L597.1,217.0 L591.1,223.0 L585.1,217.0 Z" fill="#2a78d6"/>
+<text class="t2" fill="#52514e" x="601.1" y="221.0" font-size="11" text-anchor="start">max 1.9 ms</text>
+<line class="s-critical" x1="879.6" x2="879.6" y1="208.0" y2="226.0" stroke="#d03b3b" stroke-width="2"/>
+<line class="s-s2" x1="311.5" x2="634.5" y1="243.0" y2="243.0" stroke="#eb6834" stroke-width="2"/>
+<circle class="ring f-s2" stroke="#fcfcfb" cx="311.5" cy="243.0" r="4.0" fill="#eb6834"/>
+<circle class="f-surface s-s2" cx="628.5" cy="243.0" r="4.0" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"/>
+<path class="f-s2" d="M634.5,237.0 L640.5,243.0 L634.5,249.0 L628.5,243.0 Z" fill="#eb6834"/>
+<text class="t2" fill="#52514e" x="644.5" y="247.0" font-size="11" text-anchor="start">max 3.4 ms</text>
+<line class="s-critical" x1="879.6" x2="879.6" y1="234.0" y2="252.0" stroke="#d03b3b" stroke-width="2"/></svg>

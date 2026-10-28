@@ -21,6 +21,18 @@ using TimePoint = MonotonicClock::time_point;
       .count();
 }
 
+/// Wall-clock time that never jumps: the wall clock read once (at the first call) plus the
+/// monotonic time elapsed since then. Use it for timestamps from which intervals are later
+/// measured (CAN traces, aligning processes): the real wall clock can be stepped by NTP, a user
+/// or WSL2's time re-sync with Windows (a 0.85 s forward step was observed during a 17 s run),
+/// which would appear as a gap in a trace. Price: over a long run it may drift from the real
+/// wall clock by the corrections it ignores.
+[[nodiscard]] inline std::int64_t steadyWallMicros() noexcept {
+  static const std::int64_t wall_anchor = wallClockMicros();
+  static const TimePoint monotonic_anchor = now();
+  return wall_anchor + std::chrono::duration_cast<std::chrono::microseconds>(now() - monotonic_anchor).count();
+}
+
 /// Converts a duration to floating-point milliseconds (for reporting only).
 template <typename Rep, typename Period>
 [[nodiscard]] constexpr double toMillis(std::chrono::duration<Rep, Period> duration) noexcept {

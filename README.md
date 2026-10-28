@@ -23,7 +23,7 @@ Everything is tested automatically and the performance is measured.
 > behaviour. Linux is not an RTOS, so all timing figures below are measurements on one machine,
 > not guarantees. Where something is simulated, the documentation says so.
 
-![Cruise control demo: speed, target, throttle and cruise state over 80 s](docs/images/phase3_full_demo.svg)
+![Full drive over CAN: manual acceleration, engage, new set speed, uphill grade, brake](docs/images/fig_cruise_full_demo.svg)
 
 ---
 
@@ -38,7 +38,7 @@ Everything is tested automatically and the performance is measured.
 | **Fault management** | DEM/FiM-like debouncing, recovery, latched faults, function inhibition; DTC status bits and aging persisted in a CRC-protected NVM file | [Phase 5](docs/phase5_fault_management.md) |
 | **Watchdog** | software supervision of heartbeats, execution times and stalls; safe state, then simulated reset or real process restart; a stale-output check independent of the watchdog | [Phase 5](docs/phase5_fault_management.md) |
 | **Firmware update** | image header + CRC-32, simulated NOR flash with power-loss injection, A/B slots, redundant boot record, UDS programming, trial boot with automatic rollback. **CRC-32 detects corruption; it does not authenticate.** | [Phase 6](docs/phase6_firmware_update.md) |
-| **Validation** | 357 tests (GoogleTest + pytest) incl. multi-process system tests; GCC `-Werror`, ASan/UBSan, ThreadSanitizer, cppcheck, clang-tidy; one-command regression and performance runs; GitHub Actions CI | [Phase 7](docs/phase7_validation.md) |
+| **Validation** | 369 tests (GoogleTest + pytest) incl. multi-process system tests; GCC `-Werror`, ASan/UBSan, ThreadSanitizer, cppcheck, clang-tidy; code coverage (gcov); libFuzzer targets for every input parser; one-command regression, performance and figure runs; GitHub Actions CI | [Phase 7](docs/phase7_validation.md), [coverage & fuzzing](docs/coverage_and_fuzzing.md) |
 
 ## Architecture
 
@@ -78,9 +78,22 @@ From [docs/performance_report.md](docs/performance_report.md), generated on 2026
 | Firmware update, 64 KiB image over ISO-TP | 19.8 KiB/s, 3.3 s for erase + download + check |
 | Failure handling | power loss at 21 points / SIGKILL during download: old image always boots; defective image: 3 trial boots, then automatic rollback |
 
-Verification (2026-10-26): all 273 CTest entries (357 tests) pass in the GCC `-Werror`, ASan + UBSan
-and Clang ThreadSanitizer builds, both in the working tree and in a clean copy limited to 4 CPUs
-(emulating the CI runner); cppcheck and clang-tidy report no findings.
+Verification (2026-10-28): all 274 CTest entries (369 tests) pass in the GCC `-Werror`, ASan + UBSan and
+Clang ThreadSanitizer builds; the 5 fuzz targets pass their smoke run and found nothing in a 5-minute
+campaign (~243 million inputs); cppcheck and clang-tidy report no findings; the tests cover
+87.0 % of the product code's lines and 94.7 % of its functions ([coverage report](docs/coverage_report.md)).
+
+## Results gallery
+
+Drawn from real runs by `./scripts/make_figures.py`. All 12 figures, and how to read them, are in
+[docs/results_gallery.md](docs/results_gallery.md).
+
+| | |
+|---|---|
+| ![Fault timeline](docs/images/fig_fault_timeline.svg) | ![Firmware update](docs/images/fig_firmware_update.svg) |
+| **Fault management:** every fault class injected in one run, qualified, reported and recovered | **Firmware update:** trial boot, confirmation, and automatic rollback of a defective image |
+| ![CAN trace](docs/images/fig_can_trace_timeout.svg) | ![Watchdog](docs/images/fig_watchdog_recovery.svg) |
+| **On the bus:** the speed message stops, the cruise ECU reports Fault after the timeout | **Watchdog:** a stalled task, safe values on the bus, reset and recovery |
 
 ## Quick start (WSL2 / Ubuntu 22.04)
 
@@ -90,7 +103,7 @@ sudo apt install -y build-essential cmake libgtest-dev python3-pytest   # once
 
 cmake -S . -B build -DVECU_WARNINGS_AS_ERRORS=ON
 cmake --build build -j"$(nproc)"
-ctest --test-dir build -j"$(nproc)"          # all 273 CTest entries, ~3 min
+ctest --test-dir build -j"$(nproc)"          # all 274 CTest entries, ~3 min
 ```
 
 Optional: `sudo apt install -y clang cppcheck clang-tidy` for the sanitizer and analysis stages.
@@ -114,8 +127,10 @@ Optional: `sudo apt install -y clang cppcheck clang-tidy` for the sanitizer and 
 ./build/bin/vecu_cruise_ecu --inject stall:Control_10ms:3.0:0.4 --duration 6
 
 # Validation
-./scripts/run_regression.sh                  # GCC, ASan/UBSan, TSan, static analysis (~10 min)
+./scripts/run_regression.sh                  # GCC, ASan/UBSan, TSan, fuzzing, static analysis (~12 min)
+./scripts/run_coverage.sh                    # line/function coverage of all tests -> docs/coverage_report.md
 ./scripts/run_performance.py                 # regenerate docs/performance_report.md (~1.5 min)
+./scripts/make_figures.py                    # regenerate the result figures (~2.5 min)
 ```
 
 ## Repository layout
@@ -128,7 +143,8 @@ apps/               executables: cruise_ecu, sensor_ecu, sched_bench, can_latenc
 simulator/vecu_sim/ Python: vehicle model, scenarios, DBC codec, CAN buses, ISO-TP/UDS tester,
                     firmware image format, analysis and plots
 config/             CAN matrix (DBC) and scenarios (JSON)
-tests/              unit/ (GoogleTest + pytest), integration/ (real sockets, threads, processes)
+tests/              unit/ (GoogleTest + pytest), integration/ (real sockets, threads, processes),
+                    fuzz/ (libFuzzer targets and seed corpora)
 scripts/            environment check, demos, bus tools, UDS tester, firmware tool,
                     regression, performance, static analysis
 docs/               architecture, decisions, per-phase documentation, performance report
@@ -137,7 +153,7 @@ docs/               architecture, decisions, per-phase documentation, performanc
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) · [Engineering decisions](docs/engineering_decisions.md) · [Performance report](docs/performance_report.md)
+- [Architecture](docs/architecture.md) · [Engineering decisions](docs/engineering_decisions.md) · [Performance report](docs/performance_report.md) · [Results gallery](docs/results_gallery.md) · [Coverage & fuzzing](docs/coverage_and_fuzzing.md)
 - [Phase 1 — Development environment and virtual CAN](docs/phase1_virtual_can.md)
 - [Phase 2 — ECU scheduler](docs/phase2_scheduler.md)
 - [Phase 3 — Vehicle simulation and cruise control](docs/phase3_cruise_control.md)
